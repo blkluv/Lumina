@@ -70,6 +70,8 @@ All contracts are deployed on Arbitrum One (Chain ID: 42161). Source: https://gi
 - **WHITEPAPER.md** - Comprehensive professional whitepaper covering platform vision, architecture, tokenomics, smart contracts, governance, and roadmap
 
 ## Recent Changes
+- **Treasury Dashboard Implementation** (December 2025): Added comprehensive /treasury page with live blockchain balance tracking, USD price conversion via CoinGecko API (with 60-second server-side caching), token distribution visualization, contract addresses with copy functionality, and network information display. Treasury preview section added to landing page.
+- **Price Oracle Integration**: Added /api/price/axm and /api/price/eth endpoints with caching to prevent CoinGecko rate limiting. usePriceOracle hook provides getAXMPrice, getAXMPriceData, and getETHPrice functions with proper fallback handling.
 - **Whitepaper Created**: Professional whitepaper document covering all aspects of the Lumina platform (December 2025)
 - **Landing Page UI Fix**: Fixed positioning of "A Social Network With Purpose" banner to display centered below the Lumina title on all screen sizes
 - **Smart Contract Integration**: Integrated 6 AXIOM Protocol contracts from GitHub repository with proper ethers.js implementation for on-chain interactions
