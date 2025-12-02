@@ -19,7 +19,8 @@ import {
   REPUTATION_ORACLE_ABI,
   formatTokenAmount,
   parseTokenAmount,
-  NETWORK_CONFIG
+  NETWORK_CONFIG,
+  TREASURY_CONFIG
 } from './contracts';
 
 function getProvider(): ethers.BrowserProvider | null {
@@ -716,6 +717,151 @@ export function useReputationContract() {
   return { getReputationScore, getBadges, hasBadge, getTier, getBadgeInfo };
 }
 
+export function useTreasuryContract() {
+  const tokenContract = useMemo(() => {
+    const provider = getProvider();
+    if (!provider) return null;
+    return new ethers.Contract(CONTRACT_ADDRESSES.AXM_TOKEN, AXM_TOKEN_ABI, provider);
+  }, []);
+
+  const getTreasuryBalance = useCallback(async (): Promise<string> => {
+    if (!tokenContract) return '0';
+    
+    try {
+      const balance = await tokenContract.balanceOf(TREASURY_CONFIG.TREASURY_VAULT_ADDRESS);
+      return formatTokenAmount(balance);
+    } catch (error) {
+      console.error('Failed to get treasury balance:', error);
+      return '0';
+    }
+  }, [tokenContract]);
+
+  const getRewardsPoolBalance = useCallback(async (): Promise<string> => {
+    if (!tokenContract) return '0';
+    
+    try {
+      const balance = await tokenContract.balanceOf(TREASURY_CONFIG.REWARDS_POOL_ADDRESS);
+      return formatTokenAmount(balance);
+    } catch (error) {
+      console.error('Failed to get rewards pool balance:', error);
+      return '0';
+    }
+  }, [tokenContract]);
+
+  const getTotalSupply = useCallback(async (): Promise<string> => {
+    if (!tokenContract) return '0';
+    
+    try {
+      const supply = await tokenContract.totalSupply();
+      return formatTokenAmount(supply);
+    } catch (error) {
+      console.error('Failed to get total supply:', error);
+      return '0';
+    }
+  }, [tokenContract]);
+
+  const getMaxSupply = useCallback(async (): Promise<string> => {
+    if (!tokenContract) return '0';
+    
+    try {
+      const maxSupply = await tokenContract.MAX_SUPPLY();
+      return formatTokenAmount(maxSupply);
+    } catch (error) {
+      console.error('Failed to get max supply:', error);
+      return '0';
+    }
+  }, [tokenContract]);
+
+  const getCirculatingSupply = useCallback(async (): Promise<string> => {
+    if (!tokenContract) return '0';
+    
+    try {
+      const totalSupply = await tokenContract.totalSupply();
+      const treasuryBalance = await tokenContract.balanceOf(TREASURY_CONFIG.TREASURY_VAULT_ADDRESS);
+      const circulating = BigInt(totalSupply) - BigInt(treasuryBalance);
+      return formatTokenAmount(circulating);
+    } catch (error) {
+      console.error('Failed to get circulating supply:', error);
+      return '0';
+    }
+  }, [tokenContract]);
+
+  return { 
+    getTreasuryBalance, 
+    getRewardsPoolBalance, 
+    getTotalSupply, 
+    getMaxSupply,
+    getCirculatingSupply,
+    treasuryAddress: TREASURY_CONFIG.TREASURY_VAULT_ADDRESS,
+    rewardsPoolAddress: TREASURY_CONFIG.REWARDS_POOL_ADDRESS,
+    rewardsPoolAllocation: TREASURY_CONFIG.REWARDS_POOL_ALLOCATION
+  };
+}
+
+export function usePriceOracle() {
+  const getAXMPrice = useCallback(async (): Promise<number> => {
+    try {
+      const response = await fetch('/api/price/axm');
+      if (!response.ok) {
+        return 0.001;
+      }
+      const data = await response.json();
+      return data.price || 0.001;
+    } catch (error) {
+      console.error('Failed to fetch AXM price:', error);
+      return 0.001;
+    }
+  }, []);
+
+  const getETHPrice = useCallback(async (): Promise<number> => {
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+      if (!response.ok) {
+        return 2000;
+      }
+      const data = await response.json();
+      return data.ethereum?.usd || 2000;
+    } catch (error) {
+      console.error('Failed to fetch ETH price:', error);
+      return 2000;
+    }
+  }, []);
+
+  const convertToUSD = useCallback((amount: string | number, pricePerToken: number): string => {
+    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : amount;
+    if (isNaN(numAmount)) return '$0.00';
+    const usdValue = numAmount * pricePerToken;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(usdValue);
+  }, []);
+
+  const formatLargeUSD = useCallback((amount: string | number, pricePerToken: number): string => {
+    const numAmount = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : amount;
+    if (isNaN(numAmount)) return '$0';
+    const usdValue = numAmount * pricePerToken;
+    
+    if (usdValue >= 1e9) {
+      return `$${(usdValue / 1e9).toFixed(2)}B`;
+    } else if (usdValue >= 1e6) {
+      return `$${(usdValue / 1e6).toFixed(2)}M`;
+    } else if (usdValue >= 1e3) {
+      return `$${(usdValue / 1e3).toFixed(2)}K`;
+    }
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(usdValue);
+  }, []);
+
+  return { getAXMPrice, getETHPrice, convertToUSD, formatLargeUSD };
+}
+
 export const INTEGRATED_CONTRACTS = {
   token: CONTRACT_ADDRESSES.AXM_TOKEN,
   staking: CONTRACT_ADDRESSES.STAKING_EMISSIONS,
@@ -723,6 +869,7 @@ export const INTEGRATED_CONTRACTS = {
   gamification: CONTRACT_ADDRESSES.GAMIFICATION,
   marketplace: CONTRACT_ADDRESSES.MARKETS_RWA,
   reputation: CONTRACT_ADDRESSES.REPUTATION_ORACLE,
+  treasury: CONTRACT_ADDRESSES.TREASURY_VAULT,
 };
 
 export const CONTRACT_COUNT = Object.keys(INTEGRATED_CONTRACTS).length;
