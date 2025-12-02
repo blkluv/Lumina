@@ -665,6 +665,7 @@ export default function Landing() {
               <div>
                 <h4 className="font-semibold mb-4">Web3</h4>
                 <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li><Link href="/treasury" className="hover:text-primary transition-colors">Treasury</Link></li>
                   <li><Link href="/staking" className="hover:text-primary transition-colors">Staking</Link></li>
                   <li><Link href="/governance" className="hover:text-primary transition-colors">Governance</Link></li>
                   <li><Link href="/rewards" className="hover:text-primary transition-colors">Rewards</Link></li>
