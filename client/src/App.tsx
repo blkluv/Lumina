@@ -39,6 +39,7 @@ import PhoneBanking from "@/pages/PhoneBanking";
 import Guidelines from "@/pages/Guidelines";
 import BusinessDashboard from "@/pages/BusinessDashboard";
 import Whitepaper from "@/pages/Whitepaper";
+import Treasury from "@/pages/Treasury";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -93,6 +94,7 @@ function Router() {
       <Route path="/outreach" component={() => <ProtectedRoute component={PhoneBanking} />} />
       <Route path="/guidelines" component={Guidelines} />
       <Route path="/whitepaper" component={Whitepaper} />
+      <Route path="/treasury" component={Treasury} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} />} />
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
