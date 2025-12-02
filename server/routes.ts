@@ -4266,9 +4266,33 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   app.get("/api/referrals", requireAuth, async (req, res) => {
     try {
+      const { 
+        getReferrerStats, 
+        getReferralTiers, 
+        getUserTier, 
+        getReferralSettings,
+        getDisclosure 
+      } = await import("./services/referral");
+      
       const referrals = await storage.getReferralsByReferrer(req.session.userId!);
-      const stats = await storage.getReferralStats(req.session.userId!);
-      res.json({ referrals, stats });
+      const stats = await getReferrerStats(req.session.userId!);
+      const tiers = await getReferralTiers();
+      const currentTier = getUserTier(stats.verifiedReferrals, tiers);
+      const settings = await getReferralSettings();
+      const disclosure = await getDisclosure();
+      
+      res.json({ 
+        referrals, 
+        stats,
+        currentTier,
+        allTiers: tiers,
+        caps: {
+          daily: currentTier.maxDailyReferrals || settings.maxDailyReferrals,
+          monthly: currentTier.maxMonthlyReferrals || settings.maxMonthlyReferrals,
+          lifetime: settings.maxLifetimeReferrals,
+        },
+        disclosure,
+      });
     } catch (error) {
       console.error("Get referrals error:", error);
       res.status(500).json({ error: "Failed to get referrals" });
@@ -4295,9 +4319,54 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/referrals/leaderboard", async (req, res) => {
+    try {
+      const { getReferralLeaderboard } = await import("./services/referral");
+      const limit = parseInt(req.query.limit as string) || 10;
+      const leaderboard = await getReferralLeaderboard(Math.min(limit, 50));
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Get leaderboard error:", error);
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  app.get("/api/referrals/tiers", async (req, res) => {
+    try {
+      const { getReferralTiers, getDisclosure } = await import("./services/referral");
+      const tiers = await getReferralTiers();
+      const disclosure = await getDisclosure();
+      res.json({ tiers, disclosure });
+    } catch (error) {
+      console.error("Get tiers error:", error);
+      res.status(500).json({ error: "Failed to get referral tiers" });
+    }
+  });
+
+  app.get("/api/referrals/settings", async (req, res) => {
+    try {
+      const { getReferralSettings, getDisclosure } = await import("./services/referral");
+      const settings = await getReferralSettings();
+      const disclosure = await getDisclosure();
+      res.json({ 
+        baseReward: settings.baseRewardAxm,
+        decayEnabled: settings.decayEnabled,
+        maxDailyReferrals: settings.maxDailyReferrals,
+        maxMonthlyReferrals: settings.maxMonthlyReferrals,
+        maxLifetimeReferrals: settings.maxLifetimeReferrals,
+        disclosure 
+      });
+    } catch (error) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ error: "Failed to get referral settings" });
+    }
+  });
+
   app.post("/api/referrals/apply", async (req, res) => {
     try {
       const { referralCode, userId } = req.body;
+      const clientIp = req.headers['x-forwarded-for'] as string || req.socket.remoteAddress;
+      const userAgent = req.headers['user-agent'];
       
       if (!referralCode || !userId) {
         return res.status(400).json({ error: "Referral code and user ID required" });
@@ -4312,17 +4381,35 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Cannot use your own referral code" });
       }
 
-      const event = await storage.createReferralEvent({
+      const referred = await storage.getUser(userId);
+      if (!referred) {
+        return res.status(400).json({ error: "User not found" });
+      }
+
+      const { createEnhancedReferral } = await import("./services/referral");
+      
+      const result = await createEnhancedReferral({
         referrerId: referrer.id,
         referredId: userId,
         referralCode,
-        bonusAxm: "10",
+        referredEmail: referred.email,
+        referredIp: clientIp,
+        referredUserAgent: userAgent,
       });
 
-      res.json(event);
-    } catch (error) {
+      res.json({
+        event: result.event,
+        reward: result.reward,
+        tier: result.tier,
+        message: result.validation.status === 'verified' 
+          ? `Referral verified! You earned ${result.reward.total} AXM.`
+          : result.validation.status === 'pending'
+          ? 'Referral submitted for verification.'
+          : `Referral could not be verified: ${result.validation.reasons.join(', ')}`
+      });
+    } catch (error: any) {
       console.error("Apply referral error:", error);
-      res.status(500).json({ error: "Failed to apply referral" });
+      res.status(400).json({ error: error.message || "Failed to apply referral" });
     }
   });
 

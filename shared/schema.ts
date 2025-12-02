@@ -1670,14 +1670,30 @@ export const scheduledPostsRelations = relations(scheduledPosts, ({ one }) => ({
 
 // ============= REFERRAL PROGRAM =============
 
+export const referralStatusEnum = pgEnum("referral_status", [
+  "pending",
+  "verified", 
+  "rejected",
+  "expired"
+]);
+
 export const referralEvents = pgTable("referral_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   referrerId: varchar("referrer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   referredId: varchar("referred_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   referralCode: text("referral_code").notNull(),
   bonusAxm: text("bonus_axm"),
+  baseReward: text("base_reward").default("10"),
+  decayMultiplier: text("decay_multiplier").default("1.0"),
+  tierBonus: text("tier_bonus").default("0"),
   isPaid: boolean("is_paid").default(false),
   paidAt: timestamp("paid_at"),
+  status: referralStatusEnum("status").default("pending"),
+  verifiedAt: timestamp("verified_at"),
+  referredUserIp: text("referred_user_ip"),
+  referredUserAgent: text("referred_user_agent"),
+  validationScore: integer("validation_score").default(0),
+  validationNotes: text("validation_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1685,9 +1701,50 @@ export const referralRewards = pgTable("referral_rewards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   totalReferrals: integer("total_referrals").default(0),
+  verifiedReferrals: integer("verified_referrals").default(0),
+  rejectedReferrals: integer("rejected_referrals").default(0),
   totalEarnings: text("total_earnings").default("0"),
   pendingEarnings: text("pending_earnings").default("0"),
+  currentTier: integer("current_tier").default(1),
+  lifetimeReferrals: integer("lifetime_referrals").default(0),
   lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+export const referralTiers = pgTable("referral_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tierLevel: integer("tier_level").notNull().unique(),
+  name: text("name").notNull(),
+  minReferrals: integer("min_referrals").notNull(),
+  bonusMultiplier: text("bonus_multiplier").notNull().default("1.0"),
+  maxDailyReferrals: integer("max_daily_referrals").default(10),
+  maxMonthlyReferrals: integer("max_monthly_referrals").default(100),
+  specialPerks: jsonb("special_perks"),
+  badgeIcon: text("badge_icon"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const referralProgramSettings = pgTable("referral_program_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  baseRewardAxm: text("base_reward_axm").notNull().default("10"),
+  decayEnabled: boolean("decay_enabled").default(true),
+  decayStartDay: integer("decay_start_day").default(30),
+  decayRatePerDay: text("decay_rate_per_day").default("0.02"),
+  minRewardAxm: text("min_reward_axm").default("2"),
+  maxDailyReferralsGlobal: integer("max_daily_referrals_global").default(5),
+  maxMonthlyReferralsGlobal: integer("max_monthly_referrals_global").default(50),
+  maxLifetimeReferrals: integer("max_lifetime_referrals").default(500),
+  antiSybilEnabled: boolean("anti_sybil_enabled").default(true),
+  minAccountAgeDays: integer("min_account_age_days").default(1),
+  minActivityScore: integer("min_activity_score").default(10),
+  requireEmailVerification: boolean("require_email_verification").default(true),
+  requireWalletConnection: boolean("require_wallet_connection").default(false),
+  blockDisposableEmails: boolean("block_disposable_emails").default(true),
+  sameIpCooldownHours: integer("same_ip_cooldown_hours").default(24),
+  disclosureText: text("disclosure_text").default('Referral rewards are subject to verification. Rewards decrease over time and are capped to ensure program sustainability. Terms and conditions apply.'),
+  isActive: boolean("is_active").default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id),
 });
 
 export const referralEventsRelations = relations(referralEvents, ({ one }) => ({
@@ -1810,7 +1867,18 @@ export const insertReferralEventSchema = createInsertSchema(referralEvents).omit
   id: true,
   isPaid: true,
   paidAt: true,
+  verifiedAt: true,
   createdAt: true,
+});
+
+export const insertReferralTierSchema = createInsertSchema(referralTiers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertReferralProgramSettingsSchema = createInsertSchema(referralProgramSettings).omit({
+  id: true,
+  updatedAt: true,
 });
 
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
@@ -1868,6 +1936,11 @@ export type InsertScheduledPost = z.infer<typeof insertScheduledPostSchema>;
 export type ScheduledPost = typeof scheduledPosts.$inferSelect;
 export type InsertReferralEvent = z.infer<typeof insertReferralEventSchema>;
 export type ReferralEvent = typeof referralEvents.$inferSelect;
+export type InsertReferralTier = z.infer<typeof insertReferralTierSchema>;
+export type ReferralTier = typeof referralTiers.$inferSelect;
+export type InsertReferralProgramSettings = z.infer<typeof insertReferralProgramSettingsSchema>;
+export type ReferralProgramSettings = typeof referralProgramSettings.$inferSelect;
+export type ReferralReward = typeof referralRewards.$inferSelect;
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertFiatOrder = z.infer<typeof insertFiatOrderSchema>;

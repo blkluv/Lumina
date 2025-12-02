@@ -6,26 +6,86 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { 
   Users, Gift, Coins, Copy, Check, Share2, 
-  TrendingUp, Clock, ExternalLink, HelpCircle, Shield, Zap
+  TrendingUp, Clock, ExternalLink, HelpCircle, Shield, Zap,
+  Trophy, Star, Award, Crown, Gem, Info
 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import type { ReferralEvent, User } from "@shared/schema";
 
 interface ReferralStats {
   totalReferrals: number;
+  dailyReferrals: number;
+  monthlyReferrals: number;
+  lifetimeReferrals: number;
+  verifiedReferrals: number;
+  pendingReferrals: number;
+  rejectedReferrals: number;
   totalEarnings: string;
   pendingEarnings: string;
+}
+
+interface ReferralTier {
+  tierLevel: number;
+  name: string;
+  minReferrals: number;
+  bonusMultiplier: string;
+  maxDailyReferrals: number;
+  maxMonthlyReferrals: number;
+  badgeIcon?: string;
 }
 
 interface ReferralData {
   referrals: (ReferralEvent & { referred?: User })[];
   stats: ReferralStats;
+  currentTier?: ReferralTier;
+  allTiers?: ReferralTier[];
+  caps?: {
+    daily: number;
+    monthly: number;
+    lifetime: number;
+  };
+  disclosure?: string;
 }
+
+interface LeaderboardEntry {
+  referrerId: string;
+  totalReferrals: number;
+  verifiedReferrals: number;
+  totalEarnings: string;
+  user: { username: string; displayName: string | null; avatarUrl: string | null };
+  tier: string;
+  tierLevel: number;
+}
+
+const getTierIcon = (tierLevel: number) => {
+  switch (tierLevel) {
+    case 1: return <Star className="h-4 w-4" />;
+    case 2: return <Award className="h-4 w-4" />;
+    case 3: return <Trophy className="h-4 w-4" />;
+    case 4: return <Crown className="h-4 w-4" />;
+    case 5: return <Gem className="h-4 w-4" />;
+    default: return <Star className="h-4 w-4" />;
+  }
+};
+
+const getTierColor = (tierLevel: number) => {
+  switch (tierLevel) {
+    case 1: return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+    case 2: return "bg-amber-700/20 text-amber-500 border-amber-700/30";
+    case 3: return "bg-slate-400/20 text-slate-300 border-slate-400/30";
+    case 4: return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+    case 5: return "bg-cyan-400/20 text-cyan-300 border-cyan-400/30";
+    default: return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+  }
+};
 
 function StatCard({ title, value, icon: Icon, subtext }: { 
   title: string; 
@@ -59,9 +119,33 @@ export default function Referrals() {
     queryKey: ["/api/referrals"],
   });
 
+  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<LeaderboardEntry[]>({
+    queryKey: ["/api/referrals/leaderboard"],
+  });
+
+  const { data: tiersData } = useQuery<{ tiers: ReferralTier[]; disclosure: string }>({
+    queryKey: ["/api/referrals/tiers"],
+  });
+
   const referralLink = codeData?.code 
     ? `${window.location.origin}/signup?ref=${codeData.code}` 
     : null;
+  
+  const currentTier = referralData?.currentTier;
+  const allTiers = tiersData?.tiers || referralData?.allTiers || [];
+  const caps = referralData?.caps;
+  const disclosure = referralData?.disclosure || tiersData?.disclosure;
+  
+  const getNextTier = () => {
+    if (!currentTier || !allTiers.length) return null;
+    const nextTierIndex = allTiers.findIndex(t => t.tierLevel === currentTier.tierLevel) + 1;
+    return nextTierIndex < allTiers.length ? allTiers[nextTierIndex] : null;
+  };
+  
+  const nextTier = getNextTier();
+  const progressToNextTier = nextTier && referralData?.stats
+    ? Math.min(100, ((referralData.stats.verifiedReferrals - currentTier!.minReferrals) / (nextTier.minReferrals - currentTier!.minReferrals)) * 100)
+    : 100;
 
   const copyToClipboard = async () => {
     if (referralLink) {
@@ -137,14 +221,50 @@ export default function Referrals() {
               </div>
               <div className="bg-background/50 backdrop-blur-sm rounded-lg p-3 border border-cyan-500/20">
                 <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-cyan-400" />
-                  <span className="text-xs text-muted-foreground">Network</span>
+                  {currentTier && getTierIcon(currentTier.tierLevel)}
+                  <span className="text-xs text-muted-foreground">Tier</span>
                 </div>
-                <p className="text-sm font-medium mt-1">Arbitrum L2</p>
+                <p className="text-sm font-medium mt-1">{currentTier?.name || "Starter"}</p>
               </div>
             </div>
           </div>
         </div>
+
+        {disclosure && (
+          <Alert className="border-primary/20 bg-primary/5">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              {disclosure}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {currentTier && nextTier && (
+          <Card className="border-primary/20" data-testid="card-tier-progress">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  Progress to {nextTier.name}
+                </CardTitle>
+                <Badge className={`${getTierColor(currentTier.tierLevel)} gap-1`}>
+                  {getTierIcon(currentTier.tierLevel)}
+                  {currentTier.name}
+                </Badge>
+              </div>
+              <CardDescription>
+                {Math.max(0, nextTier.minReferrals - (referralData?.stats?.verifiedReferrals || 0))} more verified referrals to unlock {parseFloat(nextTier.bonusMultiplier).toFixed(1)}x bonus
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Progress value={progressToNextTier} className="h-3" />
+              <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                <span>{referralData?.stats?.verifiedReferrals || 0} verified</span>
+                <span>{nextTier.minReferrals} needed</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-4 md:grid-cols-3">
           {referralsLoading ? (
@@ -221,45 +341,218 @@ export default function Referrals() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              How It Works
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6 md:grid-cols-3">
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Share2 className="h-6 w-6 text-primary" />
+        <Tabs defaultValue="how-it-works" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="how-it-works">How It Works</TabsTrigger>
+            <TabsTrigger value="tiers">Reward Tiers</TabsTrigger>
+            <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+            <TabsTrigger value="limits">Limits</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="how-it-works">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Gift className="h-5 w-5" />
+                  How It Works
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-6 md:grid-cols-3">
+                  <div className="text-center space-y-2">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Share2 className="h-6 w-6 text-primary" />
+                    </div>
+                    <h4 className="font-medium">1. Share Your Link</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Send your unique referral link to friends
+                    </p>
+                  </div>
+                  <div className="text-center space-y-2">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Users className="h-6 w-6 text-primary" />
+                    </div>
+                    <h4 className="font-medium">2. Friends Sign Up</h4>
+                    <p className="text-sm text-muted-foreground">
+                      When they create an account using your link
+                    </p>
+                  </div>
+                  <div className="text-center space-y-2">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Coins className="h-6 w-6 text-primary" />
+                    </div>
+                    <h4 className="font-medium">3. Earn Rewards</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Get up to {currentTier ? parseFloat(currentTier.bonusMultiplier).toFixed(1) : "1.0"}x AXM per referral
+                    </p>
+                  </div>
                 </div>
-                <h4 className="font-medium">1. Share Your Link</h4>
-                <p className="text-sm text-muted-foreground">
-                  Send your unique referral link to friends
-                </p>
-              </div>
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Users className="h-6 w-6 text-primary" />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="tiers">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  Reward Tiers
+                </CardTitle>
+                <CardDescription>
+                  Earn more with higher tiers based on verified referrals
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {allTiers.map((tier) => (
+                    <div 
+                      key={tier.tierLevel}
+                      className={`p-4 rounded-lg border ${currentTier?.tierLevel === tier.tierLevel ? 'border-primary bg-primary/5' : 'border-border'}`}
+                      data-testid={`tier-card-${tier.tierLevel}`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Badge className={`${getTierColor(tier.tierLevel)} gap-1`}>
+                          {getTierIcon(tier.tierLevel)}
+                          {tier.name}
+                        </Badge>
+                        {currentTier?.tierLevel === tier.tierLevel && (
+                          <Badge variant="outline" className="text-xs">Current</Badge>
+                        )}
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Min Referrals</span>
+                          <span className="font-medium">{tier.minReferrals}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Bonus</span>
+                          <span className="font-medium text-primary">{parseFloat(tier.bonusMultiplier).toFixed(1)}x</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Daily Limit</span>
+                          <span className="font-medium">{tier.maxDailyReferrals}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <h4 className="font-medium">2. Friends Sign Up</h4>
-                <p className="text-sm text-muted-foreground">
-                  When they create an account using your link
-                </p>
-              </div>
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Coins className="h-6 w-6 text-primary" />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="leaderboard">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-500" />
+                  Top Referrers
+                </CardTitle>
+                <CardDescription>Users with the most verified referrals</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {leaderboardLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : leaderboard?.length ? (
+                  <div className="space-y-3">
+                    {leaderboard.map((entry, index) => (
+                      <div 
+                        key={entry.referrerId}
+                        className="flex items-center gap-4 p-3 rounded-lg bg-muted/50"
+                        data-testid={`leaderboard-entry-${index}`}
+                      >
+                        <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                          index === 0 ? 'bg-yellow-500/20 text-yellow-500' :
+                          index === 1 ? 'bg-slate-400/20 text-slate-400' :
+                          index === 2 ? 'bg-amber-700/20 text-amber-600' :
+                          'bg-primary/10 text-primary'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={entry.user?.avatarUrl || undefined} />
+                          <AvatarFallback>
+                            {entry.user?.username?.charAt(0).toUpperCase() || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate">
+                              {entry.user?.displayName || entry.user?.username || "Unknown"}
+                            </span>
+                            <Badge className={`${getTierColor(entry.tierLevel)} text-xs`}>
+                              {entry.tier}
+                            </Badge>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {entry.verifiedReferrals} verified referrals
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-primary">
+                            {parseFloat(entry.totalEarnings).toLocaleString()} AXM
+                          </div>
+                          <span className="text-xs text-muted-foreground">earned</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No referrals yet. Be the first on the leaderboard!</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="limits">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Usage Limits
+                </CardTitle>
+                <CardDescription>
+                  Your current referral limits based on your tier
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Daily Referrals</span>
+                    <span>{referralData?.stats?.dailyReferrals || 0} / {caps?.daily || 5}</span>
+                  </div>
+                  <Progress value={((referralData?.stats?.dailyReferrals || 0) / (caps?.daily || 5)) * 100} />
                 </div>
-                <h4 className="font-medium">3. Earn Rewards</h4>
-                <p className="text-sm text-muted-foreground">
-                  Get 10 AXM for each successful referral
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Monthly Referrals</span>
+                    <span>{referralData?.stats?.monthlyReferrals || 0} / {caps?.monthly || 50}</span>
+                  </div>
+                  <Progress value={((referralData?.stats?.monthlyReferrals || 0) / (caps?.monthly || 50)) * 100} />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Lifetime Referrals</span>
+                    <span>{referralData?.stats?.lifetimeReferrals || 0} / {caps?.lifetime || 500}</span>
+                  </div>
+                  <Progress value={((referralData?.stats?.lifetimeReferrals || 0) / (caps?.lifetime || 500)) * 100} />
+                </div>
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    Limits increase as you advance through tiers. Higher tiers unlock more daily and monthly referral slots.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <Card>
           <CardHeader>
