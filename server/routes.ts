@@ -803,71 +803,99 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  const priceCache: { 
+    axm?: { data: any; timestamp: number }; 
+    eth?: { data: any; timestamp: number }; 
+  } = {};
+  const CACHE_TTL = 60000;
+
   app.get("/api/price/axm", async (req, res) => {
     try {
+      if (priceCache.axm && Date.now() - priceCache.axm.timestamp < CACHE_TTL) {
+        return res.json(priceCache.axm.data);
+      }
+
       const response = await fetch(
         'https://api.coingecko.com/api/v3/simple/price?ids=axiom-2&vs_currencies=usd&include_24hr_change=true&include_market_cap=true'
       );
       
       if (!response.ok) {
-        return res.json({ 
+        const fallbackData = { 
           price: 0.001,
           change24h: 0,
           marketCap: 0,
           source: 'fallback',
           message: 'Using estimated price - token not yet listed'
-        });
+        };
+        priceCache.axm = { data: fallbackData, timestamp: Date.now() };
+        return res.json(fallbackData);
       }
       
       const data = await response.json();
       
       if (data['axiom-2']) {
-        res.json({
+        const priceData = {
           price: data['axiom-2'].usd || 0.001,
           change24h: data['axiom-2'].usd_24h_change || 0,
           marketCap: data['axiom-2'].usd_market_cap || 0,
           source: 'coingecko'
-        });
+        };
+        priceCache.axm = { data: priceData, timestamp: Date.now() };
+        res.json(priceData);
       } else {
-        res.json({ 
+        const fallbackData = { 
           price: 0.001,
           change24h: 0,
           marketCap: 0,
           source: 'fallback',
           message: 'Using estimated price - token not yet listed'
-        });
+        };
+        priceCache.axm = { data: fallbackData, timestamp: Date.now() };
+        res.json(fallbackData);
       }
     } catch (error) {
       console.error("Price fetch error:", error);
-      res.json({ 
+      const fallbackData = { 
         price: 0.001,
         change24h: 0,
         marketCap: 0,
         source: 'fallback',
         message: 'Using estimated price'
-      });
+      };
+      priceCache.axm = { data: fallbackData, timestamp: Date.now() };
+      res.json(fallbackData);
     }
   });
 
   app.get("/api/price/eth", async (req, res) => {
     try {
+      if (priceCache.eth && Date.now() - priceCache.eth.timestamp < CACHE_TTL) {
+        return res.json(priceCache.eth.data);
+      }
+
       const response = await fetch(
         'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true'
       );
       
       if (!response.ok) {
-        return res.json({ price: 2000, change24h: 0, source: 'fallback' });
+        const fallbackData = { price: 2000, change24h: 0, source: 'fallback' };
+        priceCache.eth = { data: fallbackData, timestamp: Date.now() };
+        return res.json(fallbackData);
       }
       
       const data = await response.json();
-      res.json({
+      const priceData = {
         price: data.ethereum?.usd || 2000,
         change24h: data.ethereum?.usd_24h_change || 0,
         source: 'coingecko'
-      });
+      };
+      priceCache.eth = { data: priceData, timestamp: Date.now() };
+      res.json(priceData);
     } catch (error) {
       console.error("ETH price fetch error:", error);
-      res.json({ price: 2000, change24h: 0, source: 'fallback' });
+      const fallbackData = { price: 2000, change24h: 0, source: 'fallback' };
+      priceCache.eth = { data: fallbackData, timestamp: Date.now() };
+      res.json(fallbackData);
     }
   });
 

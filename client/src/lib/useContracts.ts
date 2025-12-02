@@ -798,6 +798,14 @@ export function useTreasuryContract() {
   };
 }
 
+export interface PriceData {
+  price: number;
+  change24h: number;
+  marketCap?: number;
+  source: string;
+  message?: string;
+}
+
 export function usePriceOracle() {
   const getAXMPrice = useCallback(async (): Promise<number> => {
     try {
@@ -805,22 +813,42 @@ export function usePriceOracle() {
       if (!response.ok) {
         return 0.001;
       }
-      const data = await response.json();
-      return data.price || 0.001;
+      const data: PriceData = await response.json();
+      return typeof data.price === 'number' ? data.price : 0.001;
     } catch (error) {
       console.error('Failed to fetch AXM price:', error);
       return 0.001;
     }
   }, []);
 
+  const getAXMPriceData = useCallback(async (): Promise<PriceData> => {
+    try {
+      const response = await fetch('/api/price/axm');
+      if (!response.ok) {
+        return { price: 0.001, change24h: 0, source: 'fallback' };
+      }
+      const data: PriceData = await response.json();
+      return {
+        price: typeof data.price === 'number' ? data.price : 0.001,
+        change24h: typeof data.change24h === 'number' ? data.change24h : 0,
+        marketCap: data.marketCap,
+        source: data.source || 'fallback',
+        message: data.message
+      };
+    } catch (error) {
+      console.error('Failed to fetch AXM price data:', error);
+      return { price: 0.001, change24h: 0, source: 'fallback' };
+    }
+  }, []);
+
   const getETHPrice = useCallback(async (): Promise<number> => {
     try {
-      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+      const response = await fetch('/api/price/eth');
       if (!response.ok) {
         return 2000;
       }
       const data = await response.json();
-      return data.ethereum?.usd || 2000;
+      return typeof data.price === 'number' ? data.price : 2000;
     } catch (error) {
       console.error('Failed to fetch ETH price:', error);
       return 2000;
@@ -859,7 +887,7 @@ export function usePriceOracle() {
     }).format(usdValue);
   }, []);
 
-  return { getAXMPrice, getETHPrice, convertToUSD, formatLargeUSD };
+  return { getAXMPrice, getAXMPriceData, getETHPrice, convertToUSD, formatLargeUSD };
 }
 
 export const INTEGRATED_CONTRACTS = {
