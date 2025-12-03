@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import DailyIframe from "@daily-co/daily-js";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,9 +79,8 @@ function DailyVideoPlayer({
   isHost: boolean; 
   onLeave: () => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
-  const [isJoining, setIsJoining] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamToken>({
@@ -91,71 +89,19 @@ function DailyVideoPlayer({
     retry: false,
   });
 
-  const joinCall = useCallback(async () => {
-    if (!tokenData || !containerRef.current || frameRef.current) return;
+  // Build the iframe URL with token
+  const iframeUrl = tokenData 
+    ? `${tokenData.roomUrl}?t=${tokenData.token}` 
+    : null;
 
-    try {
-      setIsJoining(true);
-      setError(null);
+  const handleIframeLoad = () => {
+    setIsLoading(false);
+  };
 
-      // Create embedded Daily.co frame with full video UI
-      const frame = DailyIframe.createFrame(containerRef.current, {
-        iframeStyle: {
-          width: "100%",
-          height: "100%",
-          border: "0",
-          borderRadius: "12px",
-        },
-        showLeaveButton: isHost,
-        showFullscreenButton: true,
-        showLocalVideo: isHost,
-        showParticipantsBar: false,
-      });
-
-      frameRef.current = frame;
-
-      // Set up event listeners
-      frame.on("joined-meeting", () => {
-        console.log("Joined Daily.co meeting");
-        setIsJoining(false);
-      });
-
-      frame.on("left-meeting", () => {
-        console.log("Left Daily.co meeting");
-        onLeave();
-      });
-
-      frame.on("error", (event) => {
-        console.error("Daily.co error:", event);
-        setError("Video connection error. Please try again.");
-        setIsJoining(false);
-      });
-
-      // Join the call with token
-      await frame.join({
-        url: tokenData.roomUrl,
-        token: tokenData.token,
-      });
-
-    } catch (err) {
-      console.error("Failed to join call:", err);
-      setError("Failed to connect to stream. Please try again.");
-      setIsJoining(false);
-    }
-  }, [tokenData, isHost, onLeave]);
-
-  useEffect(() => {
-    if (tokenData && !frameRef.current) {
-      joinCall();
-    }
-
-    return () => {
-      if (frameRef.current) {
-        frameRef.current.destroy();
-        frameRef.current = null;
-      }
-    };
-  }, [tokenData, joinCall]);
+  const handleIframeError = () => {
+    setError("Failed to load video stream");
+    setIsLoading(false);
+  };
 
   if (tokenLoading) {
     return (
@@ -165,7 +111,7 @@ function DailyVideoPlayer({
     );
   }
 
-  if (tokenError || error) {
+  if (tokenError || error || !iframeUrl) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
@@ -181,10 +127,17 @@ function DailyVideoPlayer({
 
   return (
     <div className="relative w-full h-full">
-      <div ref={containerRef} className="w-full h-full bg-black rounded-xl" />
+      <iframe
+        ref={iframeRef}
+        src={iframeUrl}
+        allow="camera; microphone; fullscreen; display-capture; autoplay"
+        className="w-full h-full border-0 rounded-xl bg-black"
+        onLoad={handleIframeLoad}
+        onError={handleIframeError}
+      />
       
-      {isJoining && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-none">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-none rounded-xl">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
             <p className="text-white">Connecting to stream...</p>
