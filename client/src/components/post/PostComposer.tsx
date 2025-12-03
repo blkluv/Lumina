@@ -269,19 +269,22 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
             )}
 
             {mediaPreview && (
-              <div className="relative mt-3 rounded-xl overflow-hidden bg-muted">
+              <div className="relative mt-3 rounded-xl overflow-hidden bg-muted/50 border border-border/50">
                 {mediaType === "image" ? (
                   <img
                     src={mediaPreview}
                     alt="Preview"
-                    className="w-full max-h-80 object-cover"
+                    className="w-full max-h-80 object-contain bg-black/5 dark:bg-white/5"
                   />
                 ) : (
-                  <video
-                    src={mediaPreview}
-                    controls
-                    className="w-full max-h-80 object-cover"
-                  />
+                  <div className="aspect-video bg-black">
+                    <video
+                      src={mediaPreview}
+                      controls
+                      playsInline
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
                 )}
                 <Button
                   variant="secondary"

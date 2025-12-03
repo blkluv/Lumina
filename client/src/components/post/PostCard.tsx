@@ -242,27 +242,30 @@ export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCar
               )}
 
               {post.mediaUrl && post.postType === "image" && (
-                <div className="mt-3 rounded-xl overflow-hidden bg-muted">
+                <div className="mt-3 rounded-xl overflow-hidden bg-muted/50 border border-border/50">
                   <img
                     src={post.mediaUrl}
                     alt="Post media"
-                    className="w-full max-h-96 object-cover"
+                    className="w-full max-h-[500px] object-contain bg-black/5 dark:bg-white/5"
+                    loading="lazy"
                     data-testid="img-post-media"
                   />
                 </div>
               )}
 
               {post.mediaUrl && post.postType === "video" && (
-                <div className="mt-3 rounded-xl overflow-hidden bg-muted relative aspect-video">
+                <div className="mt-3 rounded-xl overflow-hidden bg-black relative aspect-video border border-border/50">
                   <video
                     src={post.mediaUrl}
                     poster={post.thumbnailUrl || undefined}
                     controls
-                    className="w-full h-full object-cover"
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-contain"
                     data-testid="video-post-media"
                   />
                   {post.videoDuration && (
-                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/70 text-white text-xs flex items-center gap-1">
+                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/70 text-white text-xs flex items-center gap-1 pointer-events-none">
                       <Play className="h-3 w-3" />
                       {Math.floor(post.videoDuration / 60)}:{(post.videoDuration % 60).toString().padStart(2, "0")}
                     </div>
