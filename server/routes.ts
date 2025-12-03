@@ -1393,9 +1393,64 @@ export async function registerRoutes(app: Express): Promise<void> {
         thumbnailUrl,
       });
 
+      // Create Daily.co room for the stream
+      try {
+        const dailyService = await import("./services/daily");
+        const room = await dailyService.createRoom(stream.id);
+        
+        // Update stream with Daily.co room info
+        await storage.updateLiveStream(stream.id, {
+          dailyRoomName: room.name,
+          dailyRoomUrl: room.url,
+        });
+        
+        stream.dailyRoomName = room.name;
+        stream.dailyRoomUrl = room.url;
+      } catch (dailyError) {
+        console.error("Failed to create Daily.co room:", dailyError);
+        // Continue without video - stream will still work for chat/tips
+      }
+
       res.status(201).json(stream);
     } catch (error) {
       res.status(500).json({ error: "Failed to start stream" });
+    }
+  });
+
+  // Get Daily.co meeting token for stream
+  app.get("/api/streams/:id/token", requireAuth, async (req, res) => {
+    try {
+      const stream = await storage.getLiveStream(req.params.id);
+      if (!stream) {
+        return res.status(404).json({ error: "Stream not found" });
+      }
+      
+      if (!stream.dailyRoomName) {
+        return res.status(400).json({ error: "Stream has no video room" });
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
+
+      const isOwner = stream.hostId === req.session.userId;
+      
+      const dailyService = await import("./services/daily");
+      const token = await dailyService.createMeetingToken(stream.dailyRoomName, {
+        userId: user.id,
+        userName: user.displayName || user.username,
+        isOwner,
+      });
+
+      res.json({ 
+        token, 
+        roomUrl: stream.dailyRoomUrl,
+        isOwner 
+      });
+    } catch (error) {
+      console.error("Failed to get stream token:", error);
+      res.status(500).json({ error: "Failed to get stream access" });
     }
   });
 
@@ -1407,6 +1462,16 @@ export async function registerRoutes(app: Express): Promise<void> {
       }
       if (stream.hostId !== req.session.userId) {
         return res.status(403).json({ error: "Not authorized to end this stream" });
+      }
+
+      // Delete Daily.co room
+      if (stream.dailyRoomName) {
+        try {
+          const dailyService = await import("./services/daily");
+          await dailyService.deleteRoom(stream.dailyRoomName);
+        } catch (dailyError) {
+          console.error("Failed to delete Daily.co room:", dailyError);
+        }
       }
 
       await storage.endLiveStream(req.params.id);

@@ -600,6 +600,8 @@ export const liveStreams = pgTable("live_streams", {
   description: text("description"),
   thumbnailUrl: text("thumbnail_url"),
   streamKey: text("stream_key"),
+  dailyRoomName: text("daily_room_name"),
+  dailyRoomUrl: text("daily_room_url"),
   status: streamStatusEnum("status").notNull().default("live"),
   viewerCount: integer("viewer_count").default(0),
   peakViewers: integer("peak_viewers").default(0),
