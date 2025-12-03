@@ -37,6 +37,11 @@ The platform features a dark emerald theme with glowing accents, using HSL 160 8
 - **Twilio**: For SMS notifications and alerts (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`).
 - **Stripe**: For payment processing, donations, tips, and premium feature subscriptions (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`).
 - **OpenAI (via Replit AI Integration)**: Used by the content moderation service for analyzing text and images.
+- **Daily.co**: For live video streaming with real-time broadcasting (`DAILY_API_KEY`). Features include:
+  - Automatic room creation/deletion when streams start/end
+  - Token-based authentication for hosts (owner tokens with controls) and viewers
+  - Camera/mic toggle controls for hosts
+  - Integration with stream chat and tipping
 
 ## Smart Contract Integration
 
@@ -70,6 +75,7 @@ All contracts are deployed on Arbitrum One (Chain ID: 42161). Source: https://gi
 - **WHITEPAPER.md** - Comprehensive professional whitepaper covering platform vision, architecture, tokenomics, smart contracts, governance, and roadmap
 
 ## Recent Changes
+- **Daily.co Live Streaming Integration** (December 2025): Fully integrated Daily.co for real-time video streaming. Features include automatic room creation when streams start, token-based authentication (owner tokens for hosts, regular tokens for viewers), host controls (camera/mic toggle, end stream), graceful fallbacks when video isn't available, and seamless integration with existing chat and tipping features. Key files: `server/services/daily.ts`, `client/src/pages/LiveStreamViewer.tsx`.
 - **Treasury Dashboard Implementation** (December 2025): Added comprehensive /treasury page with live blockchain balance tracking, USD price conversion via CoinGecko API (with 60-second server-side caching), token distribution visualization, contract addresses with copy functionality, and network information display. Treasury preview section added to landing page.
 - **Price Oracle Integration**: Added /api/price/axm and /api/price/eth endpoints with caching to prevent CoinGecko rate limiting. usePriceOracle hook provides getAXMPrice, getAXMPriceData, and getETHPrice functions with proper fallback handling.
 - **Whitepaper Created**: Professional whitepaper document covering all aspects of the Lumina platform (December 2025)
