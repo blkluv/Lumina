@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Heart, MessageCircle, Share2, Coins, User, Play, Pause, Volume2, VolumeX, ChevronUp, ChevronDown, Sparkles, Award, Loader2, Copy, Check, Twitter, Facebook, Link as LinkIcon } from "lucide-react";
 import { Link } from "wouter";
@@ -21,6 +21,17 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { PostWithAuthor } from "@shared/schema";
 
+// Global sound state - unlocks after first user interaction
+const SoundContext = createContext<{
+  soundEnabled: boolean;
+  enableSound: () => void;
+  userInteracted: boolean;
+}>({
+  soundEnabled: true,
+  enableSound: () => {},
+  userInteracted: false,
+});
+
 function VideoCard({
   post,
   isActive,
@@ -34,9 +45,10 @@ function VideoCard({
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { soundEnabled, enableSound, userInteracted } = useContext(SoundContext);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false); // Start unmuted - browser will enforce if needed
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likeCount || 0);
   const [showTipModal, setShowTipModal] = useState(false);
@@ -44,6 +56,7 @@ function VideoCard({
   const [showCaption, setShowCaption] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showSoundPrompt, setShowSoundPrompt] = useState(false);
 
   const postUrl = `${window.location.origin}/post/${post.id}`;
   const shareText = `Check out this video by @${post.author.username} on Lumina!`;
@@ -94,25 +107,55 @@ function VideoCard({
     }
   };
 
+  // Sync muted state with sound enabled preference
+  useEffect(() => {
+    if (videoRef.current && userInteracted && soundEnabled) {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+      setShowSoundPrompt(false);
+    }
+  }, [userInteracted, soundEnabled]);
+
   useEffect(() => {
     if (!videoRef.current) return;
     
     if (isActive) {
-      videoRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      const video = videoRef.current;
+      
+      // Try to play with sound first
+      video.muted = !soundEnabled || !userInteracted;
+      
+      video.play().then(() => {
+        setIsPlaying(true);
+        // If we had to play muted (browser policy), show sound prompt
+        if (video.muted && !userInteracted) {
+          setShowSoundPrompt(true);
+        }
+      }).catch(() => {
+        // If unmuted play failed, try muted
+        video.muted = true;
+        setIsMuted(true);
+        setShowSoundPrompt(true);
+        video.play().then(() => setIsPlaying(true)).catch(() => {});
+      });
     } else {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
       setIsPlaying(false);
     }
-  }, [isActive]);
+  }, [isActive, soundEnabled, userInteracted]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
     
+    // Any interaction enables sound
+    enableSound();
+    
     if (isPlaying) {
       videoRef.current.pause();
     } else {
+      videoRef.current.muted = false;
+      setIsMuted(false);
       videoRef.current.play();
     }
     setIsPlaying(!isPlaying);
@@ -120,8 +163,10 @@ function VideoCard({
 
   const toggleMute = () => {
     if (!videoRef.current) return;
+    enableSound(); // Mark user interaction
     videoRef.current.muted = !isMuted;
     setIsMuted(!isMuted);
+    setShowSoundPrompt(false);
   };
 
   const handleLike = () => {
@@ -318,11 +363,34 @@ function VideoCard({
           </DropdownMenu>
         </div>
 
-        <div className="absolute top-4 right-4 flex gap-2">
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          {showSoundPrompt && (
+            <div 
+              className="bg-primary/90 backdrop-blur-sm px-4 py-2 rounded-full border border-primary cursor-pointer animate-pulse shadow-lg"
+              onClick={() => {
+                enableSound();
+                if (videoRef.current) {
+                  videoRef.current.muted = false;
+                  setIsMuted(false);
+                }
+                setShowSoundPrompt(false);
+              }}
+            >
+              <span className="text-white text-sm font-semibold flex items-center gap-2">
+                <Volume2 className="h-4 w-4" />
+                Tap for sound
+              </span>
+            </div>
+          )}
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 rounded-full bg-black/50 hover:bg-black/70 text-white border border-white/10"
+            className={cn(
+              "h-10 w-10 rounded-full text-white border",
+              isMuted 
+                ? "bg-black/70 hover:bg-black/90 border-white/20" 
+                : "bg-primary/80 hover:bg-primary border-primary/50"
+            )}
             onClick={toggleMute}
             data-testid="button-mute-video"
           >
@@ -356,6 +424,41 @@ function VideoCard({
 export default function ForYou() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  
+  // Sound state - attempts to play with sound, remembers after first interaction
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lumina-sound-enabled') === 'true';
+    }
+    return true;
+  });
+  const [userInteracted, setUserInteracted] = useState(false);
+
+  const enableSound = useCallback(() => {
+    setUserInteracted(true);
+    setSoundEnabled(true);
+    localStorage.setItem('lumina-sound-enabled', 'true');
+  }, []);
+
+  // Listen for any user interaction to unlock sound
+  useEffect(() => {
+    const handleInteraction = () => {
+      if (!userInteracted) {
+        enableSound();
+      }
+    };
+
+    // These events indicate user intent to interact
+    document.addEventListener('click', handleInteraction);
+    document.addEventListener('touchstart', handleInteraction);
+    document.addEventListener('keydown', handleInteraction);
+
+    return () => {
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('keydown', handleInteraction);
+    };
+  }, [userInteracted, enableSound]);
 
   const {
     data,
@@ -425,15 +528,16 @@ export default function ForYou() {
   }, [handleWheel]);
 
   return (
-    <div className="h-screen flex flex-col bg-black">
-      <div className="absolute top-0 left-0 right-0 z-50">
-        <Header />
-      </div>
+    <SoundContext.Provider value={{ soundEnabled, enableSound, userInteracted }}>
+      <div className="h-screen flex flex-col bg-black">
+        <div className="absolute top-0 left-0 right-0 z-50">
+          <Header />
+        </div>
 
-      <div
-        ref={containerRef}
-        className="flex-1 relative overflow-hidden pt-16"
-      >
+        <div
+          ref={containerRef}
+          className="flex-1 relative overflow-hidden pt-16"
+        >
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <div className="relative">
@@ -535,14 +639,15 @@ export default function ForYou() {
           </div>
         )}
 
-        {posts.length > 0 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
-            <Badge variant="secondary" className="bg-black/50 border border-white/10 text-white/70 backdrop-blur-sm text-xs">
-              {currentIndex + 1} / {posts.length}
-            </Badge>
-          </div>
-        )}
+          {posts.length > 0 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+              <Badge variant="secondary" className="bg-black/50 border border-white/10 text-white/70 backdrop-blur-sm text-xs">
+                {currentIndex + 1} / {posts.length}
+              </Badge>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </SoundContext.Provider>
   );
 }
