@@ -12,6 +12,21 @@ interface WebSocketMessage {
 const MAX_RECONNECT_DELAY = 30000;
 const INITIAL_RECONNECT_DELAY = 1000;
 
+// Fetch a one-time WebSocket authentication token
+async function fetchWsToken(): Promise<string | null> {
+  try {
+    const response = await fetch("/api/auth/ws-token", {
+      credentials: "include",
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.token;
+  } catch (error) {
+    console.error("Failed to fetch WebSocket token:", error);
+    return null;
+  }
+}
+
 export function useNotifications() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -20,6 +35,7 @@ export function useNotifications() {
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
+  const isConnectingRef = useRef(false);
 
   const { data: notifications = [], refetch } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
@@ -28,20 +44,38 @@ export function useNotifications() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!user?.id) return;
+    
+    // Prevent race conditions with concurrent connect attempts
+    if (isConnectingRef.current) return;
     
     if (wsRef.current?.readyState === WebSocket.OPEN || 
         wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
+    isConnectingRef.current = true;
+
+    // Get a fresh authentication token
+    const token = await fetchWsToken();
+    if (!token) {
+      isConnectingRef.current = false;
+      console.error("Could not get WebSocket authentication token");
+      // Retry after delay
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connect();
+      }, reconnectDelayRef.current);
+      return;
+    }
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws?userId=${user.id}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws?token=${token}`;
 
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
+      isConnectingRef.current = false;
 
       ws.onopen = () => {
         setIsConnected(true);
@@ -77,6 +111,7 @@ export function useNotifications() {
         console.error("WebSocket error:", error);
       };
     } catch (error) {
+      isConnectingRef.current = false;
       console.error("Failed to connect WebSocket:", error);
     }
   }, [user?.id]);

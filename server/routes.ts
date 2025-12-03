@@ -1,11 +1,51 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
+import sanitizeHtml from "sanitize-html";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { notificationHub } from "./websocket";
+import { notificationHub, generateWsToken } from "./websocket";
 import { sendBulkEmail, emailTemplates, sendEmail } from "./services/email";
 import { sendSMS, smsTemplates } from "./services/sms";
 import { createCheckoutSession, isStripeConfigured, getPublishableKey } from "./services/payments";
 import { contentModerationService, type ModerationResult } from "./services/contentModeration";
+
+// Rate limiters for different endpoint categories
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { error: "Too many authentication attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const postLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 posts per minute
+  message: { error: "Too many posts, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  message: { error: "Too many requests, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// HTML sanitization options - strip all HTML for security
+const sanitizeOptions: sanitizeHtml.IOptions = {
+  allowedTags: [], // No HTML allowed
+  allowedAttributes: {},
+  disallowedTagsMode: 'recursiveEscape',
+};
+
+// Helper to sanitize user input text
+function sanitizeText(text: string | undefined | null): string {
+  if (!text) return "";
+  return sanitizeHtml(text, sanitizeOptions).trim();
+}
 import {
   insertUserSchema,
   insertPostSchema,
@@ -62,7 +102,8 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export async function registerRoutes(app: Express): Promise<void> {
-  app.post("/api/auth/signup", async (req, res) => {
+  // Apply rate limiting to auth routes
+  app.post("/api/auth/signup", authLimiter, async (req, res) => {
     try {
       const { email, username, password } = req.body;
       
@@ -88,17 +129,29 @@ export async function registerRoutes(app: Express): Promise<void> {
         displayName: username,
       });
 
-      req.session.userId = user.id;
-
-      const { password: _, ...userWithoutPassword } = user;
-      res.status(201).json({ user: userWithoutPassword });
+      // Regenerate session to prevent session fixation
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration error:", err);
+          return res.status(500).json({ error: "Failed to create session" });
+        }
+        req.session.userId = user.id;
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("Session save error:", saveErr);
+            return res.status(500).json({ error: "Failed to save session" });
+          }
+          const { password: _, ...userWithoutPassword } = user;
+          res.status(201).json({ user: userWithoutPassword });
+        });
+      });
     } catch (error: any) {
       console.error("Signup error:", error);
       res.status(500).json({ error: "Failed to create account" });
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { email, password } = req.body;
       
@@ -116,10 +169,22 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      req.session.userId = user.id;
-
-      const { password: _, ...userWithoutPassword } = user;
-      res.json({ user: userWithoutPassword });
+      // Regenerate session to prevent session fixation
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Session regeneration error:", err);
+          return res.status(500).json({ error: "Failed to create session" });
+        }
+        req.session.userId = user.id;
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("Session save error:", saveErr);
+            return res.status(500).json({ error: "Failed to save session" });
+          }
+          const { password: _, ...userWithoutPassword } = user;
+          res.json({ user: userWithoutPassword });
+        });
+      });
     } catch (error: any) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Failed to log in" });
@@ -150,6 +215,17 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json({ user: userWithoutPassword });
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
+    }
+  });
+
+  // Generate a one-time token for WebSocket authentication
+  app.get("/api/auth/ws-token", requireAuth, (req, res) => {
+    try {
+      const token = generateWsToken(req.session.userId!);
+      res.json({ token });
+    } catch (error) {
+      console.error("WebSocket token generation error:", error);
+      res.status(500).json({ error: "Failed to generate token" });
     }
   });
 
@@ -419,14 +495,17 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.post("/api/posts", requireAuth, async (req, res) => {
+  app.post("/api/posts", requireAuth, postLimiter, async (req, res) => {
     try {
       const { content, postType, mediaUrl, mediaType } = req.body;
+      
+      // Sanitize user-provided text content to prevent XSS
+      const sanitizedContent = sanitizeText(content);
       
       // Run moderation check on new posts
       let moderationResult = null;
       
-      // Check text content
+      // Check text content (use original for moderation, sanitized for storage)
       if (content) {
         moderationResult = await contentModerationService.analyzeTextContent(content);
         
@@ -469,9 +548,10 @@ export async function registerRoutes(app: Express): Promise<void> {
         }
       }
 
-      // Create the post first
+      // Create the post with sanitized content
       const post = await storage.createPost({
         ...req.body,
+        content: sanitizedContent, // Use sanitized content
         authorId: req.session.userId!,
       });
 
@@ -563,10 +643,13 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   app.post("/api/posts/:id/comments", requireAuth, async (req, res) => {
     try {
+      // Sanitize comment content to prevent XSS
+      const sanitizedContent = sanitizeText(req.body.content);
+      
       const comment = await storage.createComment({
         postId: req.params.id,
         authorId: req.session.userId!,
-        content: req.body.content,
+        content: sanitizedContent,
       });
 
       const post = await storage.getPost(req.params.id);
@@ -584,7 +667,7 @@ export async function registerRoutes(app: Express): Promise<void> {
           type: "comment",
           title: "New Comment",
           message: `${commenter?.displayName || commenter?.username} commented on your post`,
-          data: { postId: post.id, commentId: comment.id, authorName: commenter?.displayName || commenter?.username, content: req.body.content },
+          data: { postId: post.id, commentId: comment.id, authorName: commenter?.displayName || commenter?.username, content: sanitizedContent },
         });
         
         notificationHub.pushNotification(post.authorId, notification);

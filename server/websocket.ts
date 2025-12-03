@@ -1,10 +1,53 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { Notification } from "@shared/schema";
+import crypto from "crypto";
 
 interface ConnectedClient {
   ws: WebSocket;
   userId: string;
+}
+
+// Token storage for WebSocket authentication
+// Maps token -> { userId, createdAt }
+const wsTokens = new Map<string, { userId: string; createdAt: number }>();
+
+// Token expiry time (5 minutes)
+const TOKEN_EXPIRY_MS = 5 * 60 * 1000;
+
+// Clean expired tokens periodically
+setInterval(() => {
+  const now = Date.now();
+  const tokensToDelete: string[] = [];
+  wsTokens.forEach((data, token) => {
+    if (now - data.createdAt > TOKEN_EXPIRY_MS) {
+      tokensToDelete.push(token);
+    }
+  });
+  tokensToDelete.forEach(token => wsTokens.delete(token));
+}, 60 * 1000); // Clean every minute
+
+// Generate a one-time token for WebSocket authentication
+export function generateWsToken(userId: string): string {
+  const token = crypto.randomBytes(32).toString("hex");
+  wsTokens.set(token, { userId, createdAt: Date.now() });
+  return token;
+}
+
+// Validate and consume a WebSocket token
+function validateWsToken(token: string): string | null {
+  const data = wsTokens.get(token);
+  if (!data) return null;
+  
+  const now = Date.now();
+  if (now - data.createdAt > TOKEN_EXPIRY_MS) {
+    wsTokens.delete(token);
+    return null;
+  }
+  
+  // Consume the token (one-time use)
+  wsTokens.delete(token);
+  return data.userId;
 }
 
 class NotificationHub {
@@ -16,10 +59,18 @@ class NotificationHub {
 
     this.wss.on("connection", (ws, req) => {
       const url = new URL(req.url || "", `http://${req.headers.host}`);
-      const userId = url.searchParams.get("userId");
+      const token = url.searchParams.get("token");
 
+      // Require a valid authentication token
+      if (!token) {
+        ws.close(4001, "Missing authentication token");
+        return;
+      }
+
+      // Validate and consume the token
+      const userId = validateWsToken(token);
       if (!userId) {
-        ws.close(4001, "Missing userId");
+        ws.close(4002, "Invalid or expired authentication token");
         return;
       }
 
@@ -28,7 +79,7 @@ class NotificationHub {
       }
       this.clients.get(userId)!.add(ws);
 
-      console.log(`WebSocket connected: user ${userId}`);
+      console.log(`WebSocket connected: user ${userId} (authenticated)`);
 
       ws.on("message", (data) => {
         try {
