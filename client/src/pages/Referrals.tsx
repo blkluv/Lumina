@@ -165,7 +165,7 @@ export default function Referrals() {
       try {
         await navigator.share({
           title: "Join Lumina",
-          text: "Join me on Lumina and earn LUM rewards!",
+          text: "Join me on Lumina and earn AXM rewards!",
           url: referralLink,
         });
       } catch {
@@ -192,7 +192,7 @@ export default function Referrals() {
                   Referral Program
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Invite friends & earn LUM rewards on Arbitrum One
+                  Invite friends & earn AXM rewards on Arbitrum One
                 </p>
               </div>
             </div>
@@ -210,14 +210,14 @@ export default function Referrals() {
                   <Coins className="h-4 w-4 text-green-400" />
                   <span className="text-xs text-muted-foreground">Earned</span>
                 </div>
-                <p className="text-sm font-medium mt-1">{parseFloat(referralData?.stats.totalEarnings || "0").toFixed(2)} LUM</p>
+                <p className="text-sm font-medium mt-1">{parseFloat(referralData?.stats.totalEarnings || "0").toFixed(2)} AXM</p>
               </div>
               <div className="bg-background/50 backdrop-blur-sm rounded-lg p-3 border border-yellow-500/20">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-yellow-400" />
                   <span className="text-xs text-muted-foreground">Pending</span>
                 </div>
-                <p className="text-sm font-medium mt-1">{parseFloat(referralData?.stats.pendingEarnings || "0").toFixed(2)} LUM</p>
+                <p className="text-sm font-medium mt-1">{parseFloat(referralData?.stats.pendingEarnings || "0").toFixed(2)} AXM</p>
               </div>
               <div className="bg-background/50 backdrop-blur-sm rounded-lg p-3 border border-cyan-500/20">
                 <div className="flex items-center gap-2">
@@ -288,13 +288,13 @@ export default function Referrals() {
               />
               <StatCard
                 title="Total Earnings"
-                value={`${parseFloat(referralData?.stats.totalEarnings || "0").toFixed(2)} LUM`}
+                value={`${parseFloat(referralData?.stats.totalEarnings || "0").toFixed(2)} AXM`}
                 icon={Coins}
                 subtext="Rewards earned"
               />
               <StatCard
                 title="Pending Earnings"
-                value={`${parseFloat(referralData?.stats.pendingEarnings || "0").toFixed(2)} LUM`}
+                value={`${parseFloat(referralData?.stats.pendingEarnings || "0").toFixed(2)} AXM`}
                 icon={Clock}
                 subtext="Awaiting payout"
               />
@@ -308,7 +308,7 @@ export default function Referrals() {
               <Share2 className="h-5 w-5" />
               Your Referral Link
             </CardTitle>
-            <CardDescription>Share this link to earn 10 LUM for each friend who joins</CardDescription>
+            <CardDescription>Share this link to earn 10 AXM for each friend who joins</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {codeLoading ? (
@@ -383,7 +383,7 @@ export default function Referrals() {
                     </div>
                     <h4 className="font-medium">3. Earn Rewards</h4>
                     <p className="text-sm text-muted-foreground">
-                      Get up to {currentTier ? parseFloat(currentTier.bonusMultiplier).toFixed(1) : "1.0"}x LUM per referral
+                      Get up to {currentTier ? parseFloat(currentTier.bonusMultiplier).toFixed(1) : "1.0"}x AXM per referral
                     </p>
                   </div>
                 </div>
@@ -493,7 +493,7 @@ export default function Referrals() {
                         </div>
                         <div className="text-right">
                           <div className="font-bold text-primary">
-                            {parseFloat(entry.totalEarnings).toLocaleString()} LUM
+                            {parseFloat(entry.totalEarnings).toLocaleString()} AXM
                           </div>
                           <span className="text-xs text-muted-foreground">earned</span>
                         </div>
@@ -592,7 +592,7 @@ export default function Referrals() {
                       <Badge variant={referral.isPaid ? "default" : "secondary"}>
                         {referral.isPaid ? "Paid" : "Pending"}
                       </Badge>
-                      <span className="font-medium text-primary">+{referral.bonusAxm} LUM</span>
+                      <span className="font-medium text-primary">+{referral.bonusAxm} AXM</span>
                     </div>
                   </div>
                 ))}
@@ -617,7 +617,7 @@ export default function Referrals() {
               <AccordionItem value="how-rewards">
                 <AccordionTrigger className="text-sm">How do referral rewards work?</AccordionTrigger>
                 <AccordionContent className="text-sm text-muted-foreground">
-                  When someone signs up using your referral link, you earn 10 LUM tokens once they 
+                  When someone signs up using your referral link, you earn 10 AXM tokens once they 
                   verify their account. Rewards are distributed on the Arbitrum One blockchain, ensuring 
                   transparent and secure payments.
                 </AccordionContent>
@@ -634,9 +634,9 @@ export default function Referrals() {
                 <AccordionContent className="text-sm text-muted-foreground">
                   Yes! Top referrers earn bonus rewards:
                   <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>10+ referrals: 15 LUM per new referral</li>
-                    <li>50+ referrals: 20 LUM per new referral</li>
-                    <li>100+ referrals: VIP badge + 25 LUM per new referral</li>
+                    <li>10+ referrals: 15 AXM per new referral</li>
+                    <li>50+ referrals: 20 AXM per new referral</li>
+                    <li>100+ referrals: VIP badge + 25 AXM per new referral</li>
                   </ul>
                 </AccordionContent>
               </AccordionItem>
