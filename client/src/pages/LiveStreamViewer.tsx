@@ -89,22 +89,14 @@ const TIP_AMOUNTS = [
   { amount: "100", label: "100 AXM" },
 ];
 
-function StreamPlayer({ 
-  streamId, 
-  isHost,
-}: { 
-  streamId: string; 
-  isHost: boolean;
-}) {
+function BroadcastSettingsCard({ streamId, isHost }: { streamId: string; isHost: boolean }) {
   const { toast } = useToast();
   const [copied, setCopied] = useState<string | null>(null);
-  const [showBroadcastSettings, setShowBroadcastSettings] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(true);
 
-  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamTokenResponse>({
+  const { data: tokenData, isLoading } = useQuery<StreamTokenResponse>({
     queryKey: ["/api/streams", streamId, "token"],
-    enabled: !!streamId,
-    retry: 3,
-    refetchInterval: 30000,
+    enabled: !!streamId && isHost,
   });
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -146,6 +138,123 @@ function StreamPlayer({
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const isRtmpStream = tokenData?.provider === "mux" && tokenData?.streamingMethod === "rtmp";
+
+  if (!isHost || isLoading || !isRtmpStream || !tokenData?.streamKey) {
+    return null;
+  }
+
+  return (
+    <Card className="border-primary/20 bg-card">
+      <CardHeader className="py-3 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Video className="h-4 w-4 text-primary" />
+            Broadcast Settings
+            <Badge variant="secondary" className="text-xs">Host Only</Badge>
+          </CardTitle>
+          <Button size="sm" variant="ghost" className="h-7 text-xs">
+            {isExpanded ? "Hide" : "Show"}
+          </Button>
+        </div>
+      </CardHeader>
+      
+      {isExpanded && (
+        <CardContent className="pt-0 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button 
+              onClick={openOBS}
+              className="bg-[#302E2D] hover:bg-[#302E2D]/80 text-white gap-2"
+              data-testid="button-open-obs"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in OBS
+            </Button>
+            <Button 
+              onClick={openStreamlabs}
+              className="bg-[#31C3A2] hover:bg-[#31C3A2]/80 text-white gap-2"
+              data-testid="button-open-streamlabs"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in Streamlabs
+            </Button>
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Server URL</Label>
+              <div className="flex items-center gap-2">
+                <code className="bg-muted px-3 py-2 rounded-md flex-1 truncate font-mono text-xs">
+                  {tokenData.rtmpUrl}
+                </code>
+                <Button 
+                  size="icon" 
+                  variant="outline"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => copyToClipboard(tokenData.rtmpUrl || "", "RTMP URL")}
+                  data-testid="button-copy-rtmp"
+                >
+                  {copied === "RTMP URL" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Stream Key</Label>
+              <div className="flex items-center gap-2">
+                <code className="bg-muted px-3 py-2 rounded-md flex-1 truncate font-mono text-xs">
+                  {tokenData.streamKey.substring(0, 24)}...
+                </code>
+                <Button 
+                  size="icon" 
+                  variant="outline"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => copyToClipboard(tokenData.streamKey || "", "Stream Key")}
+                  data-testid="button-copy-stream-key"
+                >
+                  {copied === "Stream Key" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <p className="text-xs text-muted-foreground">
+              Click a button above or copy settings manually
+            </p>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8"
+              onClick={copyAllSettings}
+              data-testid="button-copy-all"
+            >
+              {copied === "all" ? <Check className="h-3.5 w-3.5 mr-1.5 text-green-500" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
+              Copy All
+            </Button>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+function StreamPlayer({ 
+  streamId, 
+  isHost,
+}: { 
+  streamId: string; 
+  isHost: boolean;
+}) {
+  const { toast } = useToast();
+
+  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamTokenResponse>({
+    queryKey: ["/api/streams", streamId, "token"],
+    enabled: !!streamId,
+    retry: 3,
+    refetchInterval: 30000,
+  });
+
   if (tokenLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black">
@@ -169,7 +278,6 @@ function StreamPlayer({
   }
 
   const isBrowserStream = tokenData?.provider === "cloudflare" && tokenData?.streamingMethod === "browser";
-  const isRtmpStream = tokenData?.provider === "mux" && tokenData?.streamingMethod === "rtmp";
 
   return (
     <div className="relative w-full h-full">
@@ -201,105 +309,6 @@ function StreamPlayer({
         </div>
       )}
       
-      {isHost && isRtmpStream && tokenData?.streamKey && showBroadcastSettings && (
-        <div className="absolute bottom-20 left-4 right-4 bg-black/95 rounded-lg p-4 backdrop-blur border border-white/10">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Video className="h-4 w-4 text-primary" />
-              Broadcast Settings (Host Only)
-            </h4>
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className="h-6 text-xs text-white/60 hover:text-white"
-              onClick={() => setShowBroadcastSettings(false)}
-            >
-              Hide
-            </Button>
-          </div>
-          
-          <div className="grid gap-3 sm:grid-cols-2 mb-4">
-            <Button 
-              onClick={openOBS}
-              className="bg-[#302E2D] hover:bg-[#302E2D]/80 text-white gap-2"
-              data-testid="button-open-obs"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open in OBS
-            </Button>
-            <Button 
-              onClick={openStreamlabs}
-              className="bg-[#31C3A2] hover:bg-[#31C3A2]/80 text-white gap-2"
-              data-testid="button-open-streamlabs"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open in Streamlabs
-            </Button>
-          </div>
-
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-white/60 min-w-[70px]">Server:</span>
-              <code className="bg-white/10 px-2 py-1.5 rounded text-white flex-1 truncate font-mono">
-                {tokenData.rtmpUrl}
-              </code>
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className="h-7 w-7 text-white/60 hover:text-white"
-                onClick={() => copyToClipboard(tokenData.rtmpUrl || "", "RTMP URL")}
-                data-testid="button-copy-rtmp"
-              >
-                {copied === "RTMP URL" ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-white/60 min-w-[70px]">Stream Key:</span>
-              <code className="bg-white/10 px-2 py-1.5 rounded text-white flex-1 truncate font-mono">
-                {tokenData.streamKey.substring(0, 24)}...
-              </code>
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className="h-7 w-7 text-white/60 hover:text-white"
-                onClick={() => copyToClipboard(tokenData.streamKey || "", "Stream Key")}
-                data-testid="button-copy-stream-key"
-              >
-                {copied === "Stream Key" ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
-            <p className="text-white/50 text-xs">
-              Click a button above or copy settings manually
-            </p>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              className="h-7 text-xs border-white/20 text-white hover:bg-white/10"
-              onClick={copyAllSettings}
-              data-testid="button-copy-all"
-            >
-              {copied === "all" ? <Check className="h-3 w-3 mr-1.5 text-green-400" /> : <Copy className="h-3 w-3 mr-1.5" />}
-              Copy All
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {isHost && isRtmpStream && tokenData?.streamKey && !showBroadcastSettings && (
-        <Button
-          size="sm"
-          variant="secondary"
-          className="absolute bottom-20 left-4 bg-black/80 hover:bg-black/90 text-white border border-white/10"
-          onClick={() => setShowBroadcastSettings(true)}
-          data-testid="button-show-broadcast-settings"
-        >
-          <Video className="h-4 w-4 mr-2" />
-          Show Broadcast Settings
-        </Button>
-      )}
     </div>
   );
 }
@@ -488,6 +497,9 @@ export default function LiveStreamViewer() {
                 )}
               </div>
             </div>
+            
+            {/* Broadcast Settings Card - Host Only */}
+            <BroadcastSettingsCard streamId={streamId!} isHost={isHost} />
             
             <Card>
               <CardContent className="p-4">

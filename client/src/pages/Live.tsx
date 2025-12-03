@@ -213,7 +213,7 @@ export default function Live() {
         )}
         
         <Dialog open={goLiveOpen} onOpenChange={setGoLiveOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Start a Live Stream</DialogTitle>
               <DialogDescription>
@@ -221,7 +221,7 @@ export default function Live() {
               </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 pr-2">
               <div className="space-y-2">
                 <Label htmlFor="title">Stream Title</Label>
                 <Input
