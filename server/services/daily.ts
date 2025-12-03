@@ -69,7 +69,6 @@ export async function createRoom(streamId: string): Promise<DailyRoom> {
     privacy: "public",
     properties: {
       exp: expirationTime,
-      max_participants: 1000,
       enable_chat: false, // We use our own chat
       owner_only_broadcast: true, // Only host can broadcast
       start_video_off: false,

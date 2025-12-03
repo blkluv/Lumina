@@ -1395,19 +1395,23 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       // Create Daily.co room for the stream
       try {
+        console.log("Creating Daily.co room for stream:", stream.id);
         const dailyService = await import("./services/daily");
         const room = await dailyService.createRoom(stream.id);
+        console.log("Daily.co room created:", room.name, room.url);
         
         // Update stream with Daily.co room info
-        await storage.updateLiveStream(stream.id, {
+        const updated = await storage.updateLiveStream(stream.id, {
           dailyRoomName: room.name,
           dailyRoomUrl: room.url,
         });
+        console.log("Stream updated with room info:", updated?.dailyRoomName);
         
         stream.dailyRoomName = room.name;
         stream.dailyRoomUrl = room.url;
-      } catch (dailyError) {
-        console.error("Failed to create Daily.co room:", dailyError);
+      } catch (dailyError: any) {
+        console.error("Failed to create Daily.co room:", dailyError?.message || dailyError);
+        console.error("Full error:", JSON.stringify(dailyError, null, 2));
         // Continue without video - stream will still work for chat/tips
       }
 

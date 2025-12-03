@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import DailyIframe, { DailyCall } from "@daily-co/daily-js";
+import DailyIframe from "@daily-co/daily-js";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,11 +23,6 @@ import {
   Loader2,
   Gift,
   MessageCircle,
-  Video,
-  VideoOff,
-  Mic,
-  MicOff,
-  PhoneOff,
   AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -85,14 +80,10 @@ function DailyVideoPlayer({
   isHost: boolean; 
   onLeave: () => void;
 }) {
-  const { toast } = useToast();
-  const callRef = useRef<DailyCall | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<ReturnType<typeof DailyIframe.createFrame> | null>(null);
   const [isJoining, setIsJoining] = useState(true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  const [isAudioOn, setIsAudioOn] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasJoined, setHasJoined] = useState(false);
 
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamToken>({
     queryKey: [`/api/streams/${streamId}/token`],
@@ -101,108 +92,70 @@ function DailyVideoPlayer({
   });
 
   const joinCall = useCallback(async () => {
-    if (!tokenData || !containerRef.current || hasJoined) return;
+    if (!tokenData || !containerRef.current || frameRef.current) return;
 
     try {
       setIsJoining(true);
       setError(null);
 
-      // Create call instance
-      const call = DailyIframe.createCallObject({
-        showLeaveButton: false,
-        showFullscreenButton: false,
+      // Create embedded Daily.co frame with full video UI
+      const frame = DailyIframe.createFrame(containerRef.current, {
         iframeStyle: {
           width: "100%",
           height: "100%",
           border: "0",
           borderRadius: "12px",
         },
+        showLeaveButton: isHost,
+        showFullscreenButton: true,
+        showLocalVideo: isHost,
+        showParticipantsBar: false,
       });
 
-      callRef.current = call;
+      frameRef.current = frame;
 
       // Set up event listeners
-      call.on("joined-meeting", () => {
+      frame.on("joined-meeting", () => {
+        console.log("Joined Daily.co meeting");
         setIsJoining(false);
-        setHasJoined(true);
       });
 
-      call.on("left-meeting", () => {
-        setHasJoined(false);
+      frame.on("left-meeting", () => {
+        console.log("Left Daily.co meeting");
         onLeave();
       });
 
-      call.on("error", (event) => {
+      frame.on("error", (event) => {
         console.error("Daily.co error:", event);
         setError("Video connection error. Please try again.");
         setIsJoining(false);
       });
 
-      call.on("camera-error", () => {
-        toast({
-          title: "Camera Error",
-          description: "Could not access your camera. Please check permissions.",
-          variant: "destructive",
-        });
-      });
-
-      // Join the call
-      await call.join({
+      // Join the call with token
+      await frame.join({
         url: tokenData.roomUrl,
         token: tokenData.token,
-        startVideoOff: !isHost,
-        startAudioOff: !isHost,
       });
-
-      // Attach to container
-      if (containerRef.current) {
-        const iframe = call.iframe();
-        if (iframe) {
-          containerRef.current.innerHTML = "";
-          containerRef.current.appendChild(iframe);
-        }
-      }
 
     } catch (err) {
       console.error("Failed to join call:", err);
       setError("Failed to connect to stream. Please try again.");
       setIsJoining(false);
     }
-  }, [tokenData, isHost, hasJoined, onLeave, toast]);
+  }, [tokenData, isHost, onLeave]);
 
   useEffect(() => {
-    if (tokenData && !hasJoined) {
+    if (tokenData && !frameRef.current) {
       joinCall();
     }
 
     return () => {
-      if (callRef.current) {
-        callRef.current.leave();
-        callRef.current.destroy();
+      if (frameRef.current) {
+        frameRef.current.destroy();
+        frameRef.current = null;
       }
     };
-  }, [tokenData, joinCall, hasJoined]);
-
-  const toggleVideo = async () => {
-    if (callRef.current) {
-      await callRef.current.setLocalVideo(!isVideoOn);
-      setIsVideoOn(!isVideoOn);
-    }
-  };
-
-  const toggleAudio = async () => {
-    if (callRef.current) {
-      await callRef.current.setLocalAudio(!isAudioOn);
-      setIsAudioOn(!isAudioOn);
-    }
-  };
-
-  const leaveCall = async () => {
-    if (callRef.current) {
-      await callRef.current.leave();
-    }
-    onLeave();
-  };
+  }, [tokenData, joinCall]);
 
   if (tokenLoading) {
     return (
@@ -231,40 +184,11 @@ function DailyVideoPlayer({
       <div ref={containerRef} className="w-full h-full bg-black rounded-xl" />
       
       {isJoining && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-none">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
             <p className="text-white">Connecting to stream...</p>
           </div>
-        </div>
-      )}
-
-      {isHost && hasJoined && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/70 rounded-full backdrop-blur-sm">
-          <Button
-            variant={isVideoOn ? "secondary" : "destructive"}
-            size="icon"
-            onClick={toggleVideo}
-            data-testid="button-toggle-video"
-          >
-            {isVideoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant={isAudioOn ? "secondary" : "destructive"}
-            size="icon"
-            onClick={toggleAudio}
-            data-testid="button-toggle-audio"
-          >
-            {isAudioOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={leaveCall}
-            data-testid="button-leave-call"
-          >
-            <PhoneOff className="h-4 w-4" />
-          </Button>
         </div>
       )}
     </div>
