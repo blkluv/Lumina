@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Search, Plus, Menu, Moon, Sun, Wallet, AlertTriangle, ArrowLeftRight } from "lucide-react";
+import { Search, Plus, Menu, Moon, Sun, Wallet, AlertTriangle, ArrowLeftRight, GraduationCap, ArrowDownUp, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -107,6 +107,18 @@ export function Header({ onMenuClick }: HeaderProps) {
                 <DropdownMenuItem onClick={() => navigate("/bridge")} data-testid="button-bridge">
                   <ArrowLeftRight className="h-4 w-4 mr-2" />
                   Arbitrum Bridge
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/exchange")} data-testid="button-exchange">
+                  <ArrowDownUp className="h-4 w-4 mr-2" />
+                  Exchange
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/academy")} data-testid="button-academy">
+                  <GraduationCap className="h-4 w-4 mr-2" />
+                  Academy
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/nodes")} data-testid="button-nodes">
+                  <Server className="h-4 w-4 mr-2" />
+                  DePIN Nodes
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={disconnect} data-testid="button-disconnect-wallet">

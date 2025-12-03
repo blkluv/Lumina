@@ -5,13 +5,16 @@
  * Network: Arbitrum One (Chain ID: 42161)
  * Source: https://github.com/AxiomProtocol/AXIOM
  * 
- * Total Contracts Integrated: 6
+ * Total Contracts Integrated: 9
  * - AxiomV2 (AXM Token)
  * - AxiomStakingAndEmissionsHub  
  * - CommunitySocialHub
  * - GamificationHub
  * - MarketsAndListingsHub
  * - CitizenReputationOracle
+ * - AxiomAcademyHub (NEW)
+ * - AxiomExchangeHub (NEW)
+ * - DePINNodeSales (NEW)
  */
 
 export const NETWORK_CONFIG = {
@@ -38,6 +41,9 @@ export const CONTRACT_ADDRESSES = {
   TREASURY_REVENUE: '0x3fD63728288546AC41dAe3bf25ca383061c3A929',
   TREASURY_VAULT: '0x2bB2c2A7a1d82097488bf0b9c2a59c1910CD8D5d',
   REWARDS_POOL: '0x2bB2c2A7a1d82097488bf0b9c2a59c1910CD8D5d',
+  ACADEMY_HUB: '0x30667931BEe54a58B76D387D086A975aB37206F4',
+  EXCHANGE_HUB: '0xF660d260a0bBC690a8ab0f1e6A41049FC919A34D',
+  DEPIN_NODE_SALES: '0x876951CaE4Ad48bdBfba547Ef4316Db576A9Edbd',
 } as const;
 
 export const TREASURY_CONFIG = {
@@ -143,6 +149,70 @@ export const REPUTATION_ORACLE_ABI = [
   "event ReputationUpdated(address indexed user, uint256 oldScore, uint256 newScore)",
 ] as const;
 
+export const ACADEMY_HUB_ABI = [
+  "function totalCourses() view returns (uint256)",
+  "function totalEnrollments() view returns (uint256)",
+  "function totalCertifications() view returns (uint256)",
+  "function totalInstructors() view returns (uint256)",
+  "function isInstructor(address) view returns (bool)",
+  "function registerInstructor(string name, string bio, string imageURI)",
+  "function createCourse(string title, string description, string imageURI, uint8 level, bool requiresVerification) returns (uint256)",
+  "function addModule(uint256 courseId, string title, string description, bool isRequired) returns (uint256)",
+  "function addLesson(uint256 moduleId, string title, string contentURI, uint256 estimatedMinutes) returns (uint256)",
+  "function publishCourse(uint256 courseId)",
+  "function enrollInCourse(uint256 courseId)",
+  "function completeLesson(uint256 lessonId)",
+  "function getCourse(uint256 courseId) view returns (tuple(uint256 courseId, string title, string description, string imageURI, address instructor, uint8 level, uint8 status, uint256 moduleCount, uint256 totalLessons, uint256 enrollmentCount, uint256 completionCount, bool requiresVerification, uint256 createdAt))",
+  "function getEnrollment(address student, uint256 courseId) view returns (tuple(address student, uint256 courseId, uint256 enrolledAt, uint256 lastAccessedAt, uint256 progressPercentage, bool isCompleted, uint256 completedAt))",
+  "function getStudentCourses(address student) view returns (uint256[])",
+  "function getCertification(uint256 certId) view returns (tuple(uint256 certificationId, address recipient, uint256 courseId, uint8 certificationType, string credentialURI, address certifier, uint256 issuedAt, bool isRevoked))",
+  "function getStudentCertifications(address student) view returns (uint256[])",
+  "event CourseCreated(uint256 indexed courseId, address indexed instructor, string title, uint8 level)",
+  "event StudentEnrolled(address indexed student, uint256 indexed courseId, uint256 timestamp)",
+  "event LessonCompleted(address indexed student, uint256 indexed lessonId, uint256 timestamp)",
+  "event CourseCompleted(address indexed student, uint256 indexed courseId, uint256 timestamp)",
+  "event CertificationIssued(uint256 indexed certificationId, address indexed recipient, uint256 indexed courseId, uint8 certificationType)",
+] as const;
+
+export const EXCHANGE_HUB_ABI = [
+  "function totalPools() view returns (uint256)",
+  "function totalSwaps() view returns (uint256)",
+  "function swapFee() view returns (uint256)",
+  "function pools(uint256 poolId) view returns (tuple(uint256 poolId, address tokenA, address tokenB, uint256 reserveA, uint256 reserveB, uint256 totalLiquidity, uint256 lockedLiquidity, bool isActive, uint256 createdAt, uint256 totalVolume, uint256 totalFees))",
+  "function pairToPoolId(address tokenA, address tokenB) view returns (uint256)",
+  "function liquidityBalances(uint256 poolId, address provider) view returns (uint256)",
+  "function createPool(address tokenA, address tokenB, uint256 amountA, uint256 amountB) returns (uint256)",
+  "function addLiquidity(uint256 poolId, uint256 amountA, uint256 amountB, uint256 minLiquidity) returns (uint256)",
+  "function removeLiquidity(uint256 poolId, uint256 liquidity, uint256 minAmountA, uint256 minAmountB) returns (uint256, uint256)",
+  "function swap(uint256 poolId, address tokenIn, uint256 amountIn, uint256 minAmountOut) returns (uint256)",
+  "function getAmountOut(uint256 poolId, address tokenIn, uint256 amountIn) view returns (uint256)",
+  "function userPools(address user) view returns (uint256[])",
+  "event PoolCreated(uint256 indexed poolId, address indexed tokenA, address indexed tokenB, uint256 initialLiquidityA, uint256 initialLiquidityB)",
+  "event LiquidityAdded(uint256 indexed poolId, address indexed provider, uint256 amountA, uint256 amountB, uint256 liquidity)",
+  "event LiquidityRemoved(uint256 indexed poolId, address indexed provider, uint256 amountA, uint256 amountB, uint256 liquidity)",
+  "event Swap(uint256 indexed swapId, uint256 indexed poolId, address indexed trader, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut, uint256 fee)",
+] as const;
+
+export const DEPIN_NODE_SALES_ABI = [
+  "function treasurySafe() view returns (address)",
+  "function axmToken() view returns (address)",
+  "function totalNodesSold() view returns (uint256)",
+  "function totalEthCollected() view returns (uint256)",
+  "function totalAxmCollected() view returns (uint256)",
+  "function axmDiscountBps() view returns (uint256)",
+  "function fallbackAxmPerEth() view returns (uint256)",
+  "function nodeTiers(uint256 tierId) view returns (tuple(uint256 tier, string name, uint256 priceEth, uint8 category, bool active))",
+  "function activeTierIds(uint256 index) view returns (uint256)",
+  "function purchaseNodeWithETH(uint256 tierId, uint8 category, string metadata) payable",
+  "function purchaseNodeWithAXM(uint256 tierId, uint8 category, string metadata)",
+  "function getAxmPrice(uint256 tierId) view returns (uint256)",
+  "function getEthPrice(uint256 tierId) view returns (uint256)",
+  "function getUserPurchases(address user) view returns (tuple(address buyer, uint256 tierId, uint8 category, uint8 paymentType, uint256 ethPaid, uint256 axmPaid, uint256 timestamp, string metadata)[])",
+  "function getAllTiers() view returns (tuple(uint256 tier, string name, uint256 priceEth, uint8 category, bool active)[])",
+  "event NodePurchasedWithETH(address indexed buyer, uint256 indexed tierId, uint8 indexed category, uint256 ethPaid, uint256 purchaseId, uint256 timestamp)",
+  "event NodePurchasedWithAXM(address indexed buyer, uint256 indexed tierId, uint8 indexed category, uint256 axmPaid, uint256 discountApplied, uint256 purchaseId, uint256 timestamp)",
+] as const;
+
 export const ALL_CONTRACTS = {
   AXM_TOKEN: {
     address: CONTRACT_ADDRESSES.AXM_TOKEN,
@@ -175,6 +245,21 @@ export const ALL_CONTRACTS = {
     address: CONTRACT_ADDRESSES.REPUTATION_ORACLE,
     abi: REPUTATION_ORACLE_ABI,
     name: 'Citizen Reputation Oracle',
+  },
+  ACADEMY: {
+    address: CONTRACT_ADDRESSES.ACADEMY_HUB,
+    abi: ACADEMY_HUB_ABI,
+    name: 'Axiom Academy Hub',
+  },
+  EXCHANGE: {
+    address: CONTRACT_ADDRESSES.EXCHANGE_HUB,
+    abi: EXCHANGE_HUB_ABI,
+    name: 'Axiom Exchange Hub',
+  },
+  DEPIN_NODES: {
+    address: CONTRACT_ADDRESSES.DEPIN_NODE_SALES,
+    abi: DEPIN_NODE_SALES_ABI,
+    name: 'DePIN Node Sales',
   },
 } as const;
 
@@ -212,6 +297,6 @@ export function formatInteger(value: bigint): string {
   return Number(value).toLocaleString();
 }
 
-export const INTEGRATED_CONTRACT_COUNT = 6;
+export const INTEGRATED_CONTRACT_COUNT = 9;
 
 export const AXM_TOKEN_DECIMALS = 18;

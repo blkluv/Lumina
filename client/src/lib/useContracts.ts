@@ -17,6 +17,9 @@ import {
   GAMIFICATION_ABI,
   MARKETS_RWA_ABI,
   REPUTATION_ORACLE_ABI,
+  ACADEMY_HUB_ABI,
+  EXCHANGE_HUB_ABI,
+  DEPIN_NODE_SALES_ABI,
   formatTokenAmount,
   parseTokenAmount,
   NETWORK_CONFIG,
@@ -898,6 +901,666 @@ export const INTEGRATED_CONTRACTS = {
   marketplace: CONTRACT_ADDRESSES.MARKETS_RWA,
   reputation: CONTRACT_ADDRESSES.REPUTATION_ORACLE,
   treasury: CONTRACT_ADDRESSES.TREASURY_VAULT,
+  academy: CONTRACT_ADDRESSES.ACADEMY_HUB,
+  exchange: CONTRACT_ADDRESSES.EXCHANGE_HUB,
+  depinNodes: CONTRACT_ADDRESSES.DEPIN_NODE_SALES,
 };
 
 export const CONTRACT_COUNT = Object.keys(INTEGRATED_CONTRACTS).length;
+
+export interface CourseInfo {
+  courseId: number;
+  title: string;
+  description: string;
+  imageURI: string;
+  instructor: string;
+  level: number;
+  status: number;
+  moduleCount: number;
+  totalLessons: number;
+  enrollmentCount: number;
+  completionCount: number;
+  requiresVerification: boolean;
+  createdAt: number;
+}
+
+export interface Enrollment {
+  student: string;
+  courseId: number;
+  enrolledAt: number;
+  lastAccessedAt: number;
+  progressPercentage: number;
+  isCompleted: boolean;
+  completedAt: number;
+}
+
+export interface Certification {
+  certificationId: number;
+  recipient: string;
+  courseId: number;
+  certificationType: number;
+  credentialURI: string;
+  certifier: string;
+  issuedAt: number;
+  isRevoked: boolean;
+}
+
+export function useAcademyContract() {
+  const { address, isCorrectNetwork } = useWallet();
+
+  const contract = useMemo(() => {
+    const provider = getProvider();
+    if (!provider) return null;
+    return new ethers.Contract(CONTRACT_ADDRESSES.ACADEMY_HUB, ACADEMY_HUB_ABI, provider);
+  }, []);
+
+  const getTotalCourses = useCallback(async (): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const total = await contract.totalCourses();
+      return Number(total);
+    } catch (error) {
+      console.error('Failed to get total courses:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const getTotalEnrollments = useCallback(async (): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const total = await contract.totalEnrollments();
+      return Number(total);
+    } catch (error) {
+      console.error('Failed to get total enrollments:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const getTotalCertifications = useCallback(async (): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const total = await contract.totalCertifications();
+      return Number(total);
+    } catch (error) {
+      console.error('Failed to get total certifications:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const isInstructor = useCallback(async (userAddress?: string): Promise<boolean> => {
+    if (!contract) return false;
+    const targetAddress = userAddress || address;
+    if (!targetAddress) return false;
+    try {
+      return await contract.isInstructor(targetAddress);
+    } catch (error) {
+      console.error('Failed to check instructor status:', error);
+      return false;
+    }
+  }, [contract, address]);
+
+  const getCourse = useCallback(async (courseId: number): Promise<CourseInfo | null> => {
+    if (!contract) return null;
+    try {
+      const course = await contract.getCourse(courseId);
+      return {
+        courseId: Number(course.courseId),
+        title: course.title,
+        description: course.description,
+        imageURI: course.imageURI,
+        instructor: course.instructor,
+        level: Number(course.level),
+        status: Number(course.status),
+        moduleCount: Number(course.moduleCount),
+        totalLessons: Number(course.totalLessons),
+        enrollmentCount: Number(course.enrollmentCount),
+        completionCount: Number(course.completionCount),
+        requiresVerification: course.requiresVerification,
+        createdAt: Number(course.createdAt),
+      };
+    } catch (error) {
+      console.error('Failed to get course:', error);
+      return null;
+    }
+  }, [contract]);
+
+  const getEnrollment = useCallback(async (courseId: number, studentAddress?: string): Promise<Enrollment | null> => {
+    if (!contract) return null;
+    const targetAddress = studentAddress || address;
+    if (!targetAddress) return null;
+    try {
+      const enrollment = await contract.getEnrollment(targetAddress, courseId);
+      return {
+        student: enrollment.student,
+        courseId: Number(enrollment.courseId),
+        enrolledAt: Number(enrollment.enrolledAt),
+        lastAccessedAt: Number(enrollment.lastAccessedAt),
+        progressPercentage: Number(enrollment.progressPercentage),
+        isCompleted: enrollment.isCompleted,
+        completedAt: Number(enrollment.completedAt),
+      };
+    } catch (error) {
+      console.error('Failed to get enrollment:', error);
+      return null;
+    }
+  }, [contract, address]);
+
+  const getStudentCourses = useCallback(async (studentAddress?: string): Promise<number[]> => {
+    if (!contract) return [];
+    const targetAddress = studentAddress || address;
+    if (!targetAddress) return [];
+    try {
+      const courses = await contract.getStudentCourses(targetAddress);
+      return courses.map((id: bigint) => Number(id));
+    } catch (error) {
+      console.error('Failed to get student courses:', error);
+      return [];
+    }
+  }, [contract, address]);
+
+  const getStudentCertifications = useCallback(async (studentAddress?: string): Promise<number[]> => {
+    if (!contract) return [];
+    const targetAddress = studentAddress || address;
+    if (!targetAddress) return [];
+    try {
+      const certs = await contract.getStudentCertifications(targetAddress);
+      return certs.map((id: bigint) => Number(id));
+    } catch (error) {
+      console.error('Failed to get student certifications:', error);
+      return [];
+    }
+  }, [contract, address]);
+
+  const getCertification = useCallback(async (certId: number): Promise<Certification | null> => {
+    if (!contract) return null;
+    try {
+      const cert = await contract.getCertification(certId);
+      return {
+        certificationId: Number(cert.certificationId),
+        recipient: cert.recipient,
+        courseId: Number(cert.courseId),
+        certificationType: Number(cert.certificationType),
+        credentialURI: cert.credentialURI,
+        certifier: cert.certifier,
+        issuedAt: Number(cert.issuedAt),
+        isRevoked: cert.isRevoked,
+      };
+    } catch (error) {
+      console.error('Failed to get certification:', error);
+      return null;
+    }
+  }, [contract]);
+
+  const enrollInCourse = useCallback(async (courseId: number): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESSES.ACADEMY_HUB, ACADEMY_HUB_ABI, signer);
+      const tx = await contractWithSigner.enrollInCourse(courseId);
+      return tx.hash;
+    } catch (error) {
+      console.error('Enrollment failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  const completeLesson = useCallback(async (lessonId: number): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESSES.ACADEMY_HUB, ACADEMY_HUB_ABI, signer);
+      const tx = await contractWithSigner.completeLesson(lessonId);
+      return tx.hash;
+    } catch (error) {
+      console.error('Complete lesson failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  const registerInstructor = useCallback(async (name: string, bio: string, imageURI: string): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESSES.ACADEMY_HUB, ACADEMY_HUB_ABI, signer);
+      const tx = await contractWithSigner.registerInstructor(name, bio, imageURI);
+      return tx.hash;
+    } catch (error) {
+      console.error('Register instructor failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  return {
+    getTotalCourses,
+    getTotalEnrollments,
+    getTotalCertifications,
+    isInstructor,
+    getCourse,
+    getEnrollment,
+    getStudentCourses,
+    getStudentCertifications,
+    getCertification,
+    enrollInCourse,
+    completeLesson,
+    registerInstructor,
+  };
+}
+
+export interface PoolInfo {
+  poolId: number;
+  tokenA: string;
+  tokenB: string;
+  reserveA: string;
+  reserveB: string;
+  totalLiquidity: string;
+  lockedLiquidity: string;
+  isActive: boolean;
+  createdAt: number;
+  totalVolume: string;
+  totalFees: string;
+}
+
+export function useExchangeContract() {
+  const { address, isCorrectNetwork } = useWallet();
+
+  const contract = useMemo(() => {
+    const provider = getProvider();
+    if (!provider) return null;
+    return new ethers.Contract(CONTRACT_ADDRESSES.EXCHANGE_HUB, EXCHANGE_HUB_ABI, provider);
+  }, []);
+
+  const getTotalPools = useCallback(async (): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const total = await contract.totalPools();
+      return Number(total);
+    } catch (error) {
+      console.error('Failed to get total pools:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const getTotalSwaps = useCallback(async (): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const total = await contract.totalSwaps();
+      return Number(total);
+    } catch (error) {
+      console.error('Failed to get total swaps:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const getSwapFee = useCallback(async (): Promise<number> => {
+    if (!contract) return 30;
+    try {
+      const fee = await contract.swapFee();
+      return Number(fee);
+    } catch (error) {
+      console.error('Failed to get swap fee:', error);
+      return 30;
+    }
+  }, [contract]);
+
+  const getPool = useCallback(async (poolId: number): Promise<PoolInfo | null> => {
+    if (!contract) return null;
+    try {
+      const pool = await contract.pools(poolId);
+      return {
+        poolId: Number(pool.poolId),
+        tokenA: pool.tokenA,
+        tokenB: pool.tokenB,
+        reserveA: formatTokenAmount(pool.reserveA),
+        reserveB: formatTokenAmount(pool.reserveB),
+        totalLiquidity: formatTokenAmount(pool.totalLiquidity),
+        lockedLiquidity: formatTokenAmount(pool.lockedLiquidity),
+        isActive: pool.isActive,
+        createdAt: Number(pool.createdAt),
+        totalVolume: formatTokenAmount(pool.totalVolume),
+        totalFees: formatTokenAmount(pool.totalFees),
+      };
+    } catch (error) {
+      console.error('Failed to get pool:', error);
+      return null;
+    }
+  }, [contract]);
+
+  const getPoolByPair = useCallback(async (tokenA: string, tokenB: string): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const poolId = await contract.pairToPoolId(tokenA, tokenB);
+      return Number(poolId);
+    } catch (error) {
+      console.error('Failed to get pool by pair:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const getLiquidityBalance = useCallback(async (poolId: number, provider?: string): Promise<string> => {
+    if (!contract) return '0';
+    const targetAddress = provider || address;
+    if (!targetAddress) return '0';
+    try {
+      const balance = await contract.liquidityBalances(poolId, targetAddress);
+      return formatTokenAmount(balance);
+    } catch (error) {
+      console.error('Failed to get liquidity balance:', error);
+      return '0';
+    }
+  }, [contract, address]);
+
+  const getAmountOut = useCallback(async (poolId: number, tokenIn: string, amountIn: string): Promise<string> => {
+    if (!contract) return '0';
+    try {
+      const amountInWei = parseTokenAmount(amountIn);
+      const amountOut = await contract.getAmountOut(poolId, tokenIn, amountInWei);
+      return formatTokenAmount(amountOut);
+    } catch (error) {
+      console.error('Failed to get amount out:', error);
+      return '0';
+    }
+  }, [contract]);
+
+  const getUserPools = useCallback(async (userAddress?: string): Promise<number[]> => {
+    if (!contract) return [];
+    const targetAddress = userAddress || address;
+    if (!targetAddress) return [];
+    try {
+      const pools = await contract.userPools(targetAddress);
+      return pools.map((id: bigint) => Number(id));
+    } catch (error) {
+      console.error('Failed to get user pools:', error);
+      return [];
+    }
+  }, [contract, address]);
+
+  const swap = useCallback(async (poolId: number, tokenIn: string, amountIn: string, minAmountOut: string): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const tokenContract = new ethers.Contract(tokenIn, AXM_TOKEN_ABI, signer);
+      const exchangeContract = new ethers.Contract(CONTRACT_ADDRESSES.EXCHANGE_HUB, EXCHANGE_HUB_ABI, signer);
+      
+      const amountInWei = parseTokenAmount(amountIn);
+      const minAmountOutWei = parseTokenAmount(minAmountOut);
+      
+      const approveTx = await tokenContract.approve(CONTRACT_ADDRESSES.EXCHANGE_HUB, amountInWei);
+      await approveTx.wait();
+      
+      const swapTx = await exchangeContract.swap(poolId, tokenIn, amountInWei, minAmountOutWei);
+      return swapTx.hash;
+    } catch (error) {
+      console.error('Swap failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  const addLiquidity = useCallback(async (poolId: number, amountA: string, amountB: string, minLiquidity: string): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const exchangeContract = new ethers.Contract(CONTRACT_ADDRESSES.EXCHANGE_HUB, EXCHANGE_HUB_ABI, signer);
+      const amountAWei = parseTokenAmount(amountA);
+      const amountBWei = parseTokenAmount(amountB);
+      const minLiquidityWei = parseTokenAmount(minLiquidity);
+      
+      const tx = await exchangeContract.addLiquidity(poolId, amountAWei, amountBWei, minLiquidityWei);
+      return tx.hash;
+    } catch (error) {
+      console.error('Add liquidity failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  const removeLiquidity = useCallback(async (poolId: number, liquidity: string, minAmountA: string, minAmountB: string): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const exchangeContract = new ethers.Contract(CONTRACT_ADDRESSES.EXCHANGE_HUB, EXCHANGE_HUB_ABI, signer);
+      const liquidityWei = parseTokenAmount(liquidity);
+      const minAmountAWei = parseTokenAmount(minAmountA);
+      const minAmountBWei = parseTokenAmount(minAmountB);
+      
+      const tx = await exchangeContract.removeLiquidity(poolId, liquidityWei, minAmountAWei, minAmountBWei);
+      return tx.hash;
+    } catch (error) {
+      console.error('Remove liquidity failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  return {
+    getTotalPools,
+    getTotalSwaps,
+    getSwapFee,
+    getPool,
+    getPoolByPair,
+    getLiquidityBalance,
+    getAmountOut,
+    getUserPools,
+    swap,
+    addLiquidity,
+    removeLiquidity,
+  };
+}
+
+export interface NodeTier {
+  tier: number;
+  name: string;
+  priceEth: string;
+  category: number;
+  active: boolean;
+}
+
+export interface NodePurchase {
+  buyer: string;
+  tierId: number;
+  category: number;
+  paymentType: number;
+  ethPaid: string;
+  axmPaid: string;
+  timestamp: number;
+  metadata: string;
+}
+
+export function useDePINContract() {
+  const { address, isCorrectNetwork } = useWallet();
+
+  const contract = useMemo(() => {
+    const provider = getProvider();
+    if (!provider) return null;
+    return new ethers.Contract(CONTRACT_ADDRESSES.DEPIN_NODE_SALES, DEPIN_NODE_SALES_ABI, provider);
+  }, []);
+
+  const getTotalNodesSold = useCallback(async (): Promise<number> => {
+    if (!contract) return 0;
+    try {
+      const total = await contract.totalNodesSold();
+      return Number(total);
+    } catch (error) {
+      console.error('Failed to get total nodes sold:', error);
+      return 0;
+    }
+  }, [contract]);
+
+  const getTotalEthCollected = useCallback(async (): Promise<string> => {
+    if (!contract) return '0';
+    try {
+      const total = await contract.totalEthCollected();
+      return formatTokenAmount(total);
+    } catch (error) {
+      console.error('Failed to get total ETH collected:', error);
+      return '0';
+    }
+  }, [contract]);
+
+  const getTotalAxmCollected = useCallback(async (): Promise<string> => {
+    if (!contract) return '0';
+    try {
+      const total = await contract.totalAxmCollected();
+      return formatTokenAmount(total);
+    } catch (error) {
+      console.error('Failed to get total AXM collected:', error);
+      return '0';
+    }
+  }, [contract]);
+
+  const getAxmDiscount = useCallback(async (): Promise<number> => {
+    if (!contract) return 1500;
+    try {
+      const discount = await contract.axmDiscountBps();
+      return Number(discount);
+    } catch (error) {
+      console.error('Failed to get AXM discount:', error);
+      return 1500;
+    }
+  }, [contract]);
+
+  const getAllTiers = useCallback(async (): Promise<NodeTier[]> => {
+    if (!contract) return [];
+    try {
+      const tiers = await contract.getAllTiers();
+      return tiers.map((tier: any) => ({
+        tier: Number(tier.tier),
+        name: tier.name,
+        priceEth: formatTokenAmount(tier.priceEth),
+        category: Number(tier.category),
+        active: tier.active,
+      }));
+    } catch (error) {
+      console.error('Failed to get all tiers:', error);
+      return [];
+    }
+  }, [contract]);
+
+  const getEthPrice = useCallback(async (tierId: number): Promise<string> => {
+    if (!contract) return '0';
+    try {
+      const price = await contract.getEthPrice(tierId);
+      return formatTokenAmount(price);
+    } catch (error) {
+      console.error('Failed to get ETH price:', error);
+      return '0';
+    }
+  }, [contract]);
+
+  const getAxmPrice = useCallback(async (tierId: number): Promise<string> => {
+    if (!contract) return '0';
+    try {
+      const price = await contract.getAxmPrice(tierId);
+      return formatTokenAmount(price);
+    } catch (error) {
+      console.error('Failed to get AXM price:', error);
+      return '0';
+    }
+  }, [contract]);
+
+  const getUserPurchases = useCallback(async (userAddress?: string): Promise<NodePurchase[]> => {
+    if (!contract) return [];
+    const targetAddress = userAddress || address;
+    if (!targetAddress) return [];
+    try {
+      const purchases = await contract.getUserPurchases(targetAddress);
+      return purchases.map((p: any) => ({
+        buyer: p.buyer,
+        tierId: Number(p.tierId),
+        category: Number(p.category),
+        paymentType: Number(p.paymentType),
+        ethPaid: formatTokenAmount(p.ethPaid),
+        axmPaid: formatTokenAmount(p.axmPaid),
+        timestamp: Number(p.timestamp),
+        metadata: p.metadata,
+      }));
+    } catch (error) {
+      console.error('Failed to get user purchases:', error);
+      return [];
+    }
+  }, [contract, address]);
+
+  const purchaseNodeWithETH = useCallback(async (tierId: number, category: number, metadata: string): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const depinContract = new ethers.Contract(CONTRACT_ADDRESSES.DEPIN_NODE_SALES, DEPIN_NODE_SALES_ABI, signer);
+      const price = await depinContract.getEthPrice(tierId);
+      const tx = await depinContract.purchaseNodeWithETH(tierId, category, metadata, { value: price });
+      return tx.hash;
+    } catch (error) {
+      console.error('Purchase with ETH failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  const purchaseNodeWithAXM = useCallback(async (tierId: number, category: number, metadata: string): Promise<string | null> => {
+    if (!isCorrectNetwork) {
+      throw new Error('Please switch to Arbitrum One network');
+    }
+    const signer = await getSigner();
+    if (!signer) {
+      throw new Error('Please connect your wallet');
+    }
+    try {
+      const tokenContract = new ethers.Contract(CONTRACT_ADDRESSES.AXM_TOKEN, AXM_TOKEN_ABI, signer);
+      const depinContract = new ethers.Contract(CONTRACT_ADDRESSES.DEPIN_NODE_SALES, DEPIN_NODE_SALES_ABI, signer);
+      
+      const price = await depinContract.getAxmPrice(tierId);
+      
+      const approveTx = await tokenContract.approve(CONTRACT_ADDRESSES.DEPIN_NODE_SALES, price);
+      await approveTx.wait();
+      
+      const tx = await depinContract.purchaseNodeWithAXM(tierId, category, metadata);
+      return tx.hash;
+    } catch (error) {
+      console.error('Purchase with AXM failed:', error);
+      throw error;
+    }
+  }, [isCorrectNetwork]);
+
+  return {
+    getTotalNodesSold,
+    getTotalEthCollected,
+    getTotalAxmCollected,
+    getAxmDiscount,
+    getAllTiers,
+    getEthPrice,
+    getAxmPrice,
+    getUserPurchases,
+    purchaseNodeWithETH,
+    purchaseNodeWithAXM,
+  };
+}
