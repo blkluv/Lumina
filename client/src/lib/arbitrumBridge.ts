@@ -46,7 +46,7 @@ export type BridgeStatus = typeof BRIDGE_STATUS[keyof typeof BRIDGE_STATUS];
 export interface BridgeTransaction {
   id: string;
   type: 'deposit' | 'withdraw';
-  asset: 'ETH' | 'LUM';
+  asset: 'ETH' | 'AXM';
   amount: string;
   fromChain: 'L1' | 'L2';
   toChain: 'L1' | 'L2';
@@ -57,6 +57,9 @@ export interface BridgeTransaction {
   estimatedArrival?: number;
   confirmations?: number;
   requiredConfirmations?: number;
+  retryableTicketId?: string;
+  claimableAt?: number;
+  claimed?: boolean;
 }
 
 export interface GasEstimate {

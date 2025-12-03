@@ -371,7 +371,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       const bridgeTx: BridgeTransaction = {
         id: txId,
         type: 'deposit',
-        asset: 'LUM',
+        asset: 'AXM',
         amount,
         fromChain: 'L1',
         toChain: 'L2',
@@ -436,7 +436,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       const bridgeTx: BridgeTransaction = {
         id: txId,
         type: 'withdraw',
-        asset: 'LUM',
+        asset: 'AXM',
         amount,
         fromChain: 'L2',
         toChain: 'L1',
