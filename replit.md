@@ -73,7 +73,63 @@ All contracts are deployed on Arbitrum One (Chain ID: 42161). Source: https://gi
 - `useExchangeContract()` - getTotalPools, getPool, swap, addLiquidity, removeLiquidity, getAmountOut
 - `useDePINContract()` - getAllTiers, purchaseNodeWithETH, purchaseNodeWithAXM, getUserPurchases
 
+## Arbitrum Bridge Integration
+
+### Overview
+The platform includes a full-featured Arbitrum bridge (`/bridge`) using the official `@arbitrum/sdk` v4.0.4 for bridging ETH and AXM tokens between Ethereum L1 and Arbitrum L2.
+
+### Architecture Notes
+The bridge uses a hybrid approach due to ethers.js v5/v6 compatibility:
+- **Bridging Operations**: Direct contract calls (Inbox, ArbSys, Gateway Router) using ethers v6
+- **Status Tracking**: SDK classes (ParentTransactionReceipt, ChildTransactionReceipt, message classes) for deterministic status
+- **Claim/Redeem**: SDK message classes for L1 claims and L2 retryable redemption
+
+This approach was chosen because @arbitrum/sdk v4 is designed for ethers v5, while this project uses ethers v6. Full EthBridger/Erc20Bridger adoption will be revisited when SDK v5 with native ethers v6 support is released.
+
+### Bridge Features
+- **ETH Deposits**: L1 → L2 transfers (~10-15 min)
+- **ETH Withdrawals**: L2 → L1 transfers (~7 days challenge period)
+- **AXM Token Deposits**: ERC-20 L1 → L2 via Gateway Router
+- **AXM Token Withdrawals**: ERC-20 L2 → L1 via Gateway Router
+- **Gas Estimation**: Real-time gas cost breakdown (L1/L2 execution, data costs)
+- **Transaction Tracking**: Persistent localStorage-based transaction history
+- **Cross-Chain Message Status**: Real-time status tracking via ParentToChildMessage/ChildToParentMessage
+- **Withdrawal Claiming**: Claim funds on L1 after 7-day challenge period
+- **Retryable Ticket Redemption**: Redeem failed L1→L2 deposits on L2
+
+### Bridge Hook: `useArbitrumBridge()`
+Key functions:
+- `depositETH(amount)`, `withdrawETH(amount)` - Native ETH bridging
+- `depositToken(address, amount)`, `withdrawToken(address, amount)` - ERC-20 bridging
+- `claimPendingWithdrawal(l2TxHash)` - Claim ready withdrawals on L1
+- `redeemFailedDeposit(l1TxHash)` - Redeem failed retryable tickets on L2
+- `checkMessageStatus(txHash, type)` - Check cross-chain message status
+- `updateTransactionStatuses()` - Refresh all pending transaction statuses
+
+### Bridge Files
+- `client/src/lib/arbitrumBridge.ts` - SDK integration, message tracking, claim/redeem functions
+- `client/src/lib/useArbitrumBridge.ts` - React hook for bridge operations
+- `client/src/pages/Bridge.tsx` - Bridge UI with transaction tracker
+
+### Bridge Contracts
+| Contract | Address |
+|----------|---------|
+| L1 Gateway Router | `0x72Ce9c846789fdB6fC1f34aC4AD25Dd9ef7031ef` |
+| L2 Gateway Router | `0x5288c571Fd7aD117beA99bF60FE0846C4E84F933` |
+| Inbox | `0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f` |
+| Outbox | `0x0B9857ae2D4A3DBe74ffE1d7DF045bb7F96E4840` |
+| ArbSys (L2) | `0x0000000000000000000000000000000000000064` |
+
 ## Recent Changes
+- **Arbitrum SDK Integration Upgrade** (December 2025): Enhanced bridge with official @arbitrum/sdk v4.0.4:
+  - Upgraded from direct contract calls to SDK classes (EthBridger, Erc20Bridger)
+  - Added cross-chain message status tracking (ParentToChildMessage, ChildToParentMessage)
+  - Added withdrawal claiming after 7-day challenge period
+  - Added retryable ticket redemption for failed deposits
+  - Fixed token naming from LUM to AXM throughout bridge code
+  - Enhanced transaction tracker UI with claim/redeem buttons
+  - Key files: `client/src/lib/arbitrumBridge.ts`, `client/src/lib/useArbitrumBridge.ts`, `client/src/pages/Bridge.tsx`
+
 - **AXIOM Protocol Contract Expansion** (December 2025): Expanded smart contract integration from 6 to 9 contracts, adding:
   - **AxiomAcademyHub** (`/academy`): Educational platform with on-chain courses, enrollment tracking, lesson completion, and NFT certifications
   - **AxiomExchangeHub** (`/exchange`): Decentralized exchange with token swap interface, liquidity pool management, 0.3% swap fee, and slippage settings

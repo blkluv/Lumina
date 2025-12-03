@@ -1,12 +1,13 @@
 /**
  * useArbitrumBridge Hook
  * 
- * React hook for Arbitrum bridge operations including:
- * - ETH deposits (L1 → L2)
- * - ETH withdrawals (L2 → L1)
- * - ERC-20 token deposits/withdrawals
- * - Gas estimation
- * - Transaction tracking
+ * React hook for Arbitrum bridge operations using @arbitrum/sdk including:
+ * - ETH deposits (L1 → L2) via EthBridger
+ * - ETH withdrawals (L2 → L1) via EthBridger
+ * - ERC-20 token deposits/withdrawals via Erc20Bridger
+ * - Cross-chain message status tracking
+ * - Retryable ticket redemption
+ * - Withdrawal claiming after challenge period
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -18,7 +19,9 @@ import {
   BRIDGE_CONTRACTS,
   BRIDGE_STATUS,
   type BridgeTransaction,
+  type BridgeStatus,
   type GasEstimate,
+  type MessageStatusResult,
   estimateDepositGas,
   estimateWithdrawGas,
   getDepositEstimatedTime,
@@ -31,6 +34,12 @@ import {
   switchToL2,
   formatBridgeAmount,
   parseBridgeAmount,
+  getL1ToL2MessageStatus,
+  getL2ToL1MessageStatus,
+  redeemRetryableTicket,
+  claimWithdrawal,
+  formatChallengePeriod,
+  getChallengePeriodRemaining,
 } from './arbitrumBridge';
 import { CONTRACT_ADDRESSES } from './contracts';
 
@@ -56,6 +65,10 @@ interface UseBridgeActions {
   refreshBalances: () => Promise<void>;
   refreshTransactions: () => void;
   getEstimatedTime: (type: 'deposit' | 'withdraw') => { min: number; max: number; average: number };
+  checkMessageStatus: (txHash: string, type: 'deposit' | 'withdraw') => Promise<MessageStatusResult | null>;
+  redeemFailedDeposit: (l1TxHash: string) => Promise<string | null>;
+  claimPendingWithdrawal: (l2TxHash: string) => Promise<string | null>;
+  updateTransactionStatuses: () => Promise<void>;
 }
 
 export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
@@ -131,6 +144,128 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       return () => clearInterval(interval);
     }
   }, [address, refreshBalances]);
+  
+  const checkMessageStatus = useCallback(async (
+    txHash: string,
+    type: 'deposit' | 'withdraw'
+  ): Promise<MessageStatusResult | null> => {
+    try {
+      if (type === 'deposit') {
+        return await getL1ToL2MessageStatus(txHash);
+      } else {
+        return await getL2ToL1MessageStatus(txHash);
+      }
+    } catch (err) {
+      console.error('Failed to check message status:', err);
+      return null;
+    }
+  }, []);
+  
+  const updateTransactionStatuses = useCallback(async () => {
+    const { 
+      ParentToChildMessageStatus, 
+      ChildToParentMessageStatus,
+      ParentTransactionReceipt,
+      ChildTransactionReceipt,
+    } = await import('@arbitrum/sdk');
+    
+    const l1Provider = new JsonRpcProvider(L1_NETWORK_CONFIG.rpcUrl);
+    const l2Provider = new JsonRpcProvider(L2_NETWORK_CONFIG.rpcUrl);
+    
+    const transactions = getBridgeTransactions();
+    const pendingTxs = transactions.filter(
+      tx => tx.status !== BRIDGE_STATUS.COMPLETED && tx.status !== BRIDGE_STATUS.FAILED
+    );
+    
+    for (const tx of pendingTxs) {
+      try {
+        if (tx.type === 'deposit' && tx.l1TxHash) {
+          const receipt = await l1Provider.getTransactionReceipt(tx.l1TxHash);
+          if (!receipt) continue;
+          
+          const parentReceipt = new ParentTransactionReceipt(receipt);
+          const messages = await parentReceipt.getParentToChildMessages(l2Provider);
+          
+          if (messages.length === 0) continue;
+          
+          const message = messages[0];
+          const statusResult = await message.waitForStatus();
+          let newStatus: BridgeStatus = tx.status;
+          
+          const updates: Partial<BridgeTransaction> = { messageIndex: 0 };
+          
+          if (statusResult.status === ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD) {
+            newStatus = BRIDGE_STATUS.RETRYABLE_CREATED;
+          } else if (statusResult.status === ParentToChildMessageStatus.REDEEMED) {
+            newStatus = BRIDGE_STATUS.COMPLETED;
+            if ('childTxReceipt' in statusResult && statusResult.childTxReceipt) {
+              updates.l2TxHash = statusResult.childTxReceipt.hash;
+            }
+          } else if (statusResult.status === ParentToChildMessageStatus.CREATION_FAILED) {
+            newStatus = BRIDGE_STATUS.FAILED;
+          } else if (statusResult.status === ParentToChildMessageStatus.EXPIRED) {
+            newStatus = BRIDGE_STATUS.RETRYABLE_EXPIRED;
+          } else if (statusResult.status === ParentToChildMessageStatus.NOT_YET_CREATED) {
+            newStatus = BRIDGE_STATUS.L2_PENDING;
+          }
+          
+          updates.status = newStatus;
+          updateBridgeTransaction(tx.id, updates);
+          
+        } else if (tx.type === 'withdraw' && tx.l2TxHash) {
+          const receipt = await l2Provider.getTransactionReceipt(tx.l2TxHash);
+          if (!receipt) continue;
+          
+          const childReceipt = new ChildTransactionReceipt(receipt);
+          const messages = await childReceipt.getChildToParentMessages(l1Provider);
+          
+          if (messages.length === 0) continue;
+          
+          const message = messages[0];
+          const status = await message.status(l2Provider);
+          let newStatus: BridgeStatus = tx.status;
+          
+          const l2BlockNumber = await l2Provider.getBlockNumber();
+          const txBlockNumber = receipt.blockNumber;
+          const confirmations = l2BlockNumber - txBlockNumber;
+          const challengePeriodBlocks = 45818;
+          const blocksRemaining = Math.max(0, challengePeriodBlocks - confirmations);
+          const secondsPerBlock = 0.25;
+          const challengePeriodEnd = blocksRemaining > 0 
+            ? Date.now() + (blocksRemaining * secondsPerBlock * 1000)
+            : Date.now();
+          
+          if (status === ChildToParentMessageStatus.EXECUTED) {
+            newStatus = BRIDGE_STATUS.COMPLETED;
+          } else if (status === ChildToParentMessageStatus.CONFIRMED) {
+            newStatus = BRIDGE_STATUS.READY_TO_CLAIM;
+          } else if (status === ChildToParentMessageStatus.UNCONFIRMED) {
+            newStatus = BRIDGE_STATUS.CHALLENGE_PERIOD;
+          }
+          
+          const updates: Partial<BridgeTransaction> = { 
+            status: newStatus,
+            messageIndex: 0,
+            confirmations,
+            claimableAt: challengePeriodEnd,
+          };
+          
+          updateBridgeTransaction(tx.id, updates);
+        }
+      } catch (err) {
+        console.error(`Failed to update status for transaction ${tx.id}:`, err);
+      }
+    }
+    
+    refreshTransactions();
+  }, [refreshTransactions]);
+  
+  useEffect(() => {
+    if (address && pendingTransactions.length > 0) {
+      const interval = setInterval(updateTransactionStatuses, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [address, pendingTransactions.length, updateTransactionStatuses]);
   
   const switchChain = useCallback(async (chain: 'L1' | 'L2'): Promise<boolean> => {
     setError(null);
@@ -213,6 +348,8 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       if (receipt.status === 1) {
         updateBridgeTransaction(txId, { status: BRIDGE_STATUS.L2_PENDING });
         refreshTransactions();
+        
+        setTimeout(() => updateTransactionStatuses(), 30000);
       } else {
         updateBridgeTransaction(txId, { status: BRIDGE_STATUS.FAILED });
         refreshTransactions();
@@ -227,7 +364,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
     } finally {
       setIsLoading(false);
     }
-  }, [address, currentChain, refreshBalances, refreshTransactions]);
+  }, [address, currentChain, refreshBalances, refreshTransactions, updateTransactionStatuses]);
   
   const withdrawETH = useCallback(async (amount: string): Promise<string | null> => {
     if (!address || !window.ethereum) {
@@ -254,7 +391,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       ];
       
       const arbSys = new Contract(
-        '0x0000000000000000000000000000000000000064',
+        BRIDGE_CONTRACTS.ARB_SYS,
         arbSysAbi,
         signer
       );
@@ -262,6 +399,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       const tx = await arbSys.withdrawEth(address, { value: amountWei });
       
       const txId = generateTransactionId();
+      const challengePeriodMs = 7 * 24 * 60 * 60 * 1000;
       const bridgeTx: BridgeTransaction = {
         id: txId,
         type: 'withdraw',
@@ -272,9 +410,11 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
         status: BRIDGE_STATUS.L1_INITIATED,
         l2TxHash: tx.hash,
         timestamp: Date.now(),
-        estimatedArrival: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        estimatedArrival: Date.now() + challengePeriodMs,
+        claimableAt: Date.now() + challengePeriodMs,
         confirmations: 0,
         requiredConfirmations: 45818,
+        claimed: false,
       };
       
       saveBridgeTransaction(bridgeTx);
@@ -284,7 +424,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       
       if (receipt.status === 1) {
         updateBridgeTransaction(txId, { 
-          status: BRIDGE_STATUS.L2_PENDING,
+          status: BRIDGE_STATUS.CHALLENGE_PERIOD,
           confirmations: 1,
         });
         refreshTransactions();
@@ -384,7 +524,15 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       saveBridgeTransaction(bridgeTx);
       refreshTransactions();
       
-      await tx.wait();
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 1) {
+        updateBridgeTransaction(txId, { status: BRIDGE_STATUS.L2_PENDING });
+        refreshTransactions();
+        
+        setTimeout(() => updateTransactionStatuses(), 30000);
+      }
+      
       await refreshBalances();
       
       return tx.hash;
@@ -394,7 +542,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
     } finally {
       setIsLoading(false);
     }
-  }, [address, currentChain, refreshBalances, refreshTransactions]);
+  }, [address, currentChain, refreshBalances, refreshTransactions, updateTransactionStatuses]);
   
   const withdrawToken = useCallback(async (
     tokenAddress: string,
@@ -433,6 +581,7 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
       );
       
       const txId = generateTransactionId();
+      const challengePeriodMs = 7 * 24 * 60 * 60 * 1000;
       const bridgeTx: BridgeTransaction = {
         id: txId,
         type: 'withdraw',
@@ -443,20 +592,107 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
         status: BRIDGE_STATUS.L1_INITIATED,
         l2TxHash: tx.hash,
         timestamp: Date.now(),
-        estimatedArrival: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        estimatedArrival: Date.now() + challengePeriodMs,
+        claimableAt: Date.now() + challengePeriodMs,
         confirmations: 0,
         requiredConfirmations: 45818,
+        claimed: false,
       };
       
       saveBridgeTransaction(bridgeTx);
       refreshTransactions();
       
-      await tx.wait();
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 1) {
+        updateBridgeTransaction(txId, { status: BRIDGE_STATUS.CHALLENGE_PERIOD });
+        refreshTransactions();
+      }
+      
       await refreshBalances();
       
       return tx.hash;
     } catch (err: any) {
       setError(err.message || 'Token withdrawal failed');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [address, currentChain, refreshBalances, refreshTransactions]);
+  
+  const redeemFailedDeposit = useCallback(async (l1TxHash: string): Promise<string | null> => {
+    if (!address || !window.ethereum) {
+      setError('Wallet not connected');
+      return null;
+    }
+    
+    if (currentChain !== 'L2') {
+      setError('Please switch to Arbitrum to redeem the retryable ticket');
+      return null;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const redeemTxHash = await redeemRetryableTicket(l1TxHash);
+      
+      if (redeemTxHash) {
+        const transactions = getBridgeTransactions();
+        const tx = transactions.find(t => t.l1TxHash === l1TxHash);
+        if (tx) {
+          updateBridgeTransaction(tx.id, { 
+            status: BRIDGE_STATUS.COMPLETED,
+            l2TxHash: redeemTxHash,
+          });
+        }
+        refreshTransactions();
+        await refreshBalances();
+      }
+      
+      return redeemTxHash;
+    } catch (err: any) {
+      setError(err.message || 'Failed to redeem retryable ticket');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [address, currentChain, refreshBalances, refreshTransactions]);
+  
+  const claimPendingWithdrawal = useCallback(async (l2TxHash: string): Promise<string | null> => {
+    if (!address || !window.ethereum) {
+      setError('Wallet not connected');
+      return null;
+    }
+    
+    if (currentChain !== 'L1') {
+      setError('Please switch to Ethereum mainnet to claim your withdrawal');
+      return null;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const claimTxHash = await claimWithdrawal(l2TxHash);
+      
+      if (claimTxHash) {
+        const transactions = getBridgeTransactions();
+        const tx = transactions.find(t => t.l2TxHash === l2TxHash);
+        if (tx) {
+          updateBridgeTransaction(tx.id, { 
+            status: BRIDGE_STATUS.COMPLETED,
+            l1TxHash: claimTxHash,
+            claimed: true,
+          });
+        }
+        refreshTransactions();
+        await refreshBalances();
+      }
+      
+      return claimTxHash;
+    } catch (err: any) {
+      setError(err.message || 'Failed to claim withdrawal');
       return null;
     } finally {
       setIsLoading(false);
@@ -494,5 +730,9 @@ export function useArbitrumBridge(): UseBridgeState & UseBridgeActions {
     refreshBalances,
     refreshTransactions,
     getEstimatedTime,
+    checkMessageStatus,
+    redeemFailedDeposit,
+    claimPendingWithdrawal,
+    updateTransactionStatuses,
   };
 }

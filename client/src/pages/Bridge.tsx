@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ArrowUpDown, ArrowRight, Clock, Fuel, AlertCircle, CheckCircle2, Loader2, ExternalLink, Wallet, RefreshCw } from "lucide-react";
+import { ArrowUpDown, ArrowRight, Clock, Fuel, AlertCircle, CheckCircle2, Loader2, ExternalLink, Wallet, RefreshCw, AlertTriangle, PlayCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +16,11 @@ import { useArbitrumBridge } from "@/lib/useArbitrumBridge";
 import { 
   L1_NETWORK_CONFIG, 
   L2_NETWORK_CONFIG,
+  BRIDGE_STATUS,
   getL1ExplorerUrl,
   getL2ExplorerUrl,
+  formatChallengePeriod,
+  getChallengePeriodRemaining,
   type BridgeTransaction,
 } from "@/lib/arbitrumBridge";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
@@ -89,40 +92,130 @@ function GasEstimator({
 
 function TransactionTracker({ 
   transactions,
-  onRefresh 
+  onRefresh,
+  onClaim,
+  onRedeem,
+  currentChain,
+  isLoading,
 }: { 
   transactions: BridgeTransaction[];
   onRefresh: () => void;
+  onClaim: (l2TxHash: string) => Promise<string | null>;
+  onRedeem: (l1TxHash: string) => Promise<string | null>;
+  currentChain: 'L1' | 'L2' | null;
+  isLoading: boolean;
 }) {
+  const { toast } = useToast();
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
   if (transactions.length === 0) return null;
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed':
+  const getStatusIcon = (tx: BridgeTransaction) => {
+    switch (tx.status) {
+      case BRIDGE_STATUS.COMPLETED:
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case 'failed':
+      case BRIDGE_STATUS.FAILED:
+      case BRIDGE_STATUS.RETRYABLE_EXPIRED:
         return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case BRIDGE_STATUS.READY_TO_CLAIM:
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case BRIDGE_STATUS.RETRYABLE_CREATED:
+        return <PlayCircle className="h-4 w-4 text-orange-500" />;
       default:
-        return <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />;
+        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
+    }
+  };
+
+  const getStatusBadge = (tx: BridgeTransaction) => {
+    switch (tx.status) {
+      case BRIDGE_STATUS.COMPLETED:
+        return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">Completed</Badge>;
+      case BRIDGE_STATUS.FAILED:
+        return <Badge variant="destructive">Failed</Badge>;
+      case BRIDGE_STATUS.RETRYABLE_EXPIRED:
+        return <Badge variant="destructive">Expired</Badge>;
+      case BRIDGE_STATUS.READY_TO_CLAIM:
+        return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Ready to Claim</Badge>;
+      case BRIDGE_STATUS.RETRYABLE_CREATED:
+        return <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20">Needs Redemption</Badge>;
+      case BRIDGE_STATUS.CHALLENGE_PERIOD:
+        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Challenge Period</Badge>;
+      case BRIDGE_STATUS.L1_INITIATED:
+      case BRIDGE_STATUS.L2_PENDING:
+        return <Badge variant="outline">Processing</Badge>;
+      default:
+        return <Badge variant="outline">{tx.status}</Badge>;
     }
   };
 
   const getProgress = (tx: BridgeTransaction) => {
-    if (tx.status === 'completed') return 100;
-    if (tx.status === 'failed') return 0;
+    if (tx.status === BRIDGE_STATUS.COMPLETED) return 100;
+    if (tx.status === BRIDGE_STATUS.FAILED || tx.status === BRIDGE_STATUS.RETRYABLE_EXPIRED) return 0;
+    if (tx.status === BRIDGE_STATUS.READY_TO_CLAIM) return 95;
     if (tx.type === 'withdraw' && tx.confirmations && tx.requiredConfirmations) {
-      return (tx.confirmations / tx.requiredConfirmations) * 100;
+      return Math.min(90, (tx.confirmations / tx.requiredConfirmations) * 90);
     }
-    if (tx.status === 'l2_pending') return 75;
-    if (tx.status === 'l1_initiated') return 25;
+    if (tx.status === BRIDGE_STATUS.L2_PENDING) return 75;
+    if (tx.status === BRIDGE_STATUS.L1_INITIATED) return 25;
+    if (tx.status === BRIDGE_STATUS.RETRYABLE_CREATED) return 50;
     return 10;
+  };
+
+  const handleClaim = async (tx: BridgeTransaction) => {
+    if (!tx.l2TxHash) return;
+    setActionLoading(tx.id);
+    try {
+      const result = await onClaim(tx.l2TxHash);
+      if (result) {
+        toast({ title: "Withdrawal claimed successfully!" });
+      }
+    } catch (err: any) {
+      toast({ 
+        title: "Failed to claim withdrawal", 
+        description: err.message,
+        variant: "destructive" 
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRedeem = async (tx: BridgeTransaction) => {
+    if (!tx.l1TxHash) return;
+    setActionLoading(tx.id);
+    try {
+      const result = await onRedeem(tx.l1TxHash);
+      if (result) {
+        toast({ title: "Deposit redeemed successfully!" });
+      }
+    } catch (err: any) {
+      toast({ 
+        title: "Failed to redeem deposit", 
+        description: err.message,
+        variant: "destructive" 
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const canClaim = (tx: BridgeTransaction) => {
+    return tx.type === 'withdraw' && 
+           tx.status === BRIDGE_STATUS.READY_TO_CLAIM && 
+           currentChain === 'L1';
+  };
+
+  const canRedeem = (tx: BridgeTransaction) => {
+    return tx.type === 'deposit' && 
+           tx.status === BRIDGE_STATUS.RETRYABLE_CREATED && 
+           currentChain === 'L2';
   };
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Pending Transactions</CardTitle>
+          <CardTitle className="text-base">Bridge Transactions</CardTitle>
           <Button variant="ghost" size="icon" onClick={onRefresh} data-testid="button-refresh-transactions">
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -130,33 +223,52 @@ function TransactionTracker({
       </CardHeader>
       <CardContent className="space-y-3">
         {transactions.map((tx) => (
-          <div key={tx.id} className="space-y-2 p-3 rounded-lg bg-muted/50">
+          <div key={tx.id} className="space-y-3 p-4 rounded-lg bg-muted/50 border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {getStatusIcon(tx.status)}
+                {getStatusIcon(tx)}
                 <span className="font-medium">
                   {tx.type === 'deposit' ? 'Deposit' : 'Withdraw'} {tx.amount} {tx.asset}
                 </span>
               </div>
-              <Badge variant="outline">
-                {tx.fromChain} → {tx.toChain}
-              </Badge>
+              {getStatusBadge(tx)}
             </div>
-            <Progress value={getProgress(tx)} className="h-1" />
+            
+            <Progress value={getProgress(tx)} className="h-1.5" />
+            
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {tx.type === 'deposit' ? '~15 min' : '~7 days'}
+                {tx.type === 'withdraw' && tx.claimableAt ? (
+                  formatChallengePeriod(tx.claimableAt)
+                ) : tx.type === 'deposit' ? (
+                  '~15 min'
+                ) : (
+                  '~7 days'
+                )}
               </div>
-              <div className="flex gap-2">
+              <Badge variant="outline" className="text-xs">
+                {tx.fromChain} → {tx.toChain}
+              </Badge>
+            </div>
+
+            {tx.type === 'withdraw' && tx.confirmations !== undefined && tx.requiredConfirmations && (
+              <div className="text-xs text-muted-foreground">
+                Confirmations: {tx.confirmations.toLocaleString()} / {tx.requiredConfirmations.toLocaleString()}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2 text-xs">
                 {tx.l1TxHash && (
                   <a 
                     href={getL1ExplorerUrl(tx.l1TxHash)} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-primary"
+                    className="flex items-center gap-1 hover:text-primary transition-colors"
+                    data-testid={`link-l1-tx-${tx.id}`}
                   >
-                    L1 <ExternalLink className="h-3 w-3" />
+                    L1 Tx <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
                 {tx.l2TxHash && (
@@ -164,12 +276,54 @@ function TransactionTracker({
                     href={getL2ExplorerUrl(tx.l2TxHash)} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-primary"
+                    className="flex items-center gap-1 hover:text-primary transition-colors"
+                    data-testid={`link-l2-tx-${tx.id}`}
                   >
-                    L2 <ExternalLink className="h-3 w-3" />
+                    L2 Tx <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
               </div>
+
+              {canClaim(tx) && (
+                <Button 
+                  size="sm" 
+                  onClick={() => handleClaim(tx)}
+                  disabled={actionLoading === tx.id || isLoading}
+                  data-testid={`button-claim-${tx.id}`}
+                >
+                  {actionLoading === tx.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : null}
+                  Claim on L1
+                </Button>
+              )}
+
+              {canRedeem(tx) && (
+                <Button 
+                  size="sm" 
+                  variant="secondary"
+                  onClick={() => handleRedeem(tx)}
+                  disabled={actionLoading === tx.id || isLoading}
+                  data-testid={`button-redeem-${tx.id}`}
+                >
+                  {actionLoading === tx.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : null}
+                  Redeem on L2
+                </Button>
+              )}
+
+              {tx.status === BRIDGE_STATUS.READY_TO_CLAIM && currentChain !== 'L1' && (
+                <div className="text-xs text-muted-foreground">
+                  Switch to Ethereum to claim
+                </div>
+              )}
+
+              {tx.status === BRIDGE_STATUS.RETRYABLE_CREATED && currentChain !== 'L2' && (
+                <div className="text-xs text-muted-foreground">
+                  Switch to Arbitrum to redeem
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -281,6 +435,9 @@ export default function Bridge() {
     refreshBalances,
     refreshTransactions,
     getEstimatedTime,
+    claimPendingWithdrawal,
+    redeemFailedDeposit,
+    updateTransactionStatuses,
   } = useArbitrumBridge();
 
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>('deposit');
@@ -300,6 +457,22 @@ export default function Bridge() {
     : (asset === 'ETH' ? l1Balance : l1TokenBalance);
 
   const estimatedTime = getEstimatedTime(activeTab);
+
+  const allTransactions = pendingTransactions;
+
+  const claimableCount = allTransactions.filter(
+    tx => tx.status === BRIDGE_STATUS.READY_TO_CLAIM
+  ).length;
+
+  const redeemableCount = allTransactions.filter(
+    tx => tx.status === BRIDGE_STATUS.RETRYABLE_CREATED
+  ).length;
+
+  useEffect(() => {
+    if (isConnected && pendingTransactions.length > 0) {
+      updateTransactionStatuses();
+    }
+  }, [isConnected]);
 
   const handleBridge = async () => {
     if (!amount || parseFloat(amount) <= 0) {
@@ -368,6 +541,20 @@ export default function Bridge() {
             Bridge assets between Ethereum and Arbitrum One
           </p>
         </div>
+
+        {(claimableCount > 0 || redeemableCount > 0) && (
+          <Alert className="mb-6 border-yellow-500/50 bg-yellow-500/10">
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <AlertDescription className="text-yellow-600 dark:text-yellow-400">
+              {claimableCount > 0 && (
+                <span>You have {claimableCount} withdrawal{claimableCount > 1 ? 's' : ''} ready to claim on L1. </span>
+              )}
+              {redeemableCount > 0 && (
+                <span>You have {redeemableCount} deposit{redeemableCount > 1 ? 's' : ''} that need redemption on L2.</span>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
@@ -517,8 +704,12 @@ export default function Bridge() {
             />
 
             <TransactionTracker 
-              transactions={pendingTransactions}
+              transactions={allTransactions}
               onRefresh={refreshTransactions}
+              onClaim={claimPendingWithdrawal}
+              onRedeem={redeemFailedDeposit}
+              currentChain={currentChain}
+              isLoading={isLoading}
             />
           </div>
 
@@ -583,10 +774,22 @@ export default function Bridge() {
                   <span className="ml-2">7 days</span>
                 </div>
                 <Separator />
-                <p className="text-xs text-muted-foreground">
-                  Withdrawals require a 7-day challenge period before funds can be claimed on L1. 
-                  This is a security feature of Arbitrum's optimistic rollup design.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">Withdrawal Process:</p>
+                  <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                    <li>Initiate withdrawal on Arbitrum</li>
+                    <li>Wait 7 days (challenge period)</li>
+                    <li>Claim funds on Ethereum</li>
+                  </ol>
+                </div>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground font-medium">Failed Deposits:</p>
+                  <p className="text-xs text-muted-foreground">
+                    If a deposit fails, you can redeem it on L2 using the "Redeem" button. 
+                    Retryable tickets expire after 7 days.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </div>

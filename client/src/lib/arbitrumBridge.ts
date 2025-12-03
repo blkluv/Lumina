@@ -2,10 +2,33 @@
  * Arbitrum Bridge Configuration and Utilities
  * 
  * Integrates @arbitrum/sdk for ETH and token bridging between
- * Ethereum L1 and Arbitrum L2
+ * Ethereum L1 (Parent) and Arbitrum L2 (Child)
+ * 
+ * Architecture Notes:
+ * - Deposit/withdraw operations use direct contract calls (Inbox, ArbSys, Gateway Router)
+ *   rather than EthBridger/Erc20Bridger due to ethers.js v5/v6 compatibility issues.
+ *   The SDK v4 is designed for ethers v5, while this project uses ethers v6.
+ * 
+ * - SDK classes are used for cross-chain message tracking:
+ *   - ParentTransactionReceipt / ChildTransactionReceipt for receipt parsing
+ *   - ParentToChildMessage for L1→L2 message status
+ *   - ChildToParentMessage for L2→L1 message status and claiming
+ *   - ParentToChildMessageStatus / ChildToParentMessageStatus for deterministic status mapping
+ * 
+ * - This hybrid approach provides:
+ *   - Reliable bridging via stable contract interfaces
+ *   - SDK-driven status tracking with proper enum handling
+ *   - Claim/redeem functionality using SDK message classes
  */
 
 import { JsonRpcProvider, BrowserProvider, formatEther, parseEther } from 'ethers';
+import { 
+  getArbitrumNetwork,
+  EthBridger,
+  Erc20Bridger,
+  ParentToChildMessageStatus,
+  ChildToParentMessageStatus,
+} from '@arbitrum/sdk';
 import { CONTRACT_ADDRESSES, NETWORK_CONFIG } from './contracts';
 
 export const L1_NETWORK_CONFIG = {
@@ -31,12 +54,18 @@ export const BRIDGE_CONTRACTS = {
   INBOX: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
   OUTBOX: '0x0B9857ae2D4A3DBe74ffE1d7DF045bb7F96E4840',
   ROLLUP: '0x5eF0D09d1E6204141B4d37530808eD19f60FBa35',
+  ARB_SYS: '0x0000000000000000000000000000000000000064',
 } as const;
 
 export const BRIDGE_STATUS = {
   PENDING: 'pending',
   L1_INITIATED: 'l1_initiated',
   L2_PENDING: 'l2_pending',
+  RETRYABLE_CREATED: 'retryable_created',
+  RETRYABLE_REDEEMED: 'retryable_redeemed',
+  RETRYABLE_EXPIRED: 'retryable_expired',
+  CHALLENGE_PERIOD: 'challenge_period',
+  READY_TO_CLAIM: 'ready_to_claim',
   COMPLETED: 'completed',
   FAILED: 'failed',
 } as const;
@@ -60,6 +89,7 @@ export interface BridgeTransaction {
   retryableTicketId?: string;
   claimableAt?: number;
   claimed?: boolean;
+  messageIndex?: number;
 }
 
 export interface GasEstimate {
@@ -74,6 +104,27 @@ export interface GasEstimate {
     l2ExecutionCost: string;
     l1DataCost: string;
   };
+}
+
+export interface MessageStatusResult {
+  status: ParentToChildMessageStatus | ChildToParentMessageStatus | 'unknown';
+  statusText: string;
+  l2TxHash?: string;
+  retryable?: boolean;
+  canRedeem?: boolean;
+  confirmations?: number;
+  requiredConfirmations?: number;
+  challengePeriodEnd?: number;
+  isClaimable?: boolean;
+}
+
+let cachedArbitrumNetwork: Awaited<ReturnType<typeof getArbitrumNetwork>> | null = null;
+
+export async function getArbitrumNetworkConfig() {
+  if (!cachedArbitrumNetwork) {
+    cachedArbitrumNetwork = await getArbitrumNetwork(L2_NETWORK_CONFIG.chainId);
+  }
+  return cachedArbitrumNetwork;
 }
 
 export async function getL1Provider(): Promise<JsonRpcProvider> {
@@ -108,6 +159,16 @@ export async function getL2Signer(): Promise<any | null> {
   }
   
   return provider.getSigner();
+}
+
+export async function getEthBridger(): Promise<EthBridger> {
+  const network = await getArbitrumNetworkConfig();
+  return new EthBridger(network);
+}
+
+export async function getErc20Bridger(): Promise<Erc20Bridger> {
+  const network = await getArbitrumNetworkConfig();
+  return new Erc20Bridger(network);
 }
 
 export async function switchToL1(): Promise<boolean> {
@@ -273,28 +334,286 @@ export async function getL2BlockNumber(): Promise<number> {
   return provider.getBlockNumber();
 }
 
-export async function getL1ToL2MessageStatus(l1TxHash: string): Promise<{
-  status: 'pending' | 'confirmed' | 'executed' | 'failed';
-  l2TxHash?: string;
-  retryable?: boolean;
-}> {
-  return {
-    status: 'pending',
-    retryable: true,
-  };
+export function mapParentToChildStatus(status: ParentToChildMessageStatus): {
+  bridgeStatus: BridgeStatus;
+  statusText: string;
+  canRedeem: boolean;
+} {
+  switch (status) {
+    case ParentToChildMessageStatus.NOT_YET_CREATED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.PENDING,
+        statusText: 'Waiting for retryable ticket creation',
+        canRedeem: false,
+      };
+    case ParentToChildMessageStatus.CREATION_FAILED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.FAILED,
+        statusText: 'Retryable ticket creation failed',
+        canRedeem: false,
+      };
+    case ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD:
+      return {
+        bridgeStatus: BRIDGE_STATUS.RETRYABLE_CREATED,
+        statusText: 'Funds deposited, awaiting redemption',
+        canRedeem: true,
+      };
+    case ParentToChildMessageStatus.REDEEMED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.COMPLETED,
+        statusText: 'Successfully redeemed on L2',
+        canRedeem: false,
+      };
+    case ParentToChildMessageStatus.EXPIRED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.RETRYABLE_EXPIRED,
+        statusText: 'Retryable ticket expired',
+        canRedeem: false,
+      };
+    default:
+      return {
+        bridgeStatus: BRIDGE_STATUS.PENDING,
+        statusText: 'Unknown status',
+        canRedeem: false,
+      };
+  }
 }
 
-export async function getL2ToL1MessageStatus(l2TxHash: string): Promise<{
-  status: 'pending' | 'confirmed' | 'ready_to_execute' | 'executed' | 'failed';
-  confirmations: number;
-  requiredConfirmations: number;
-  challengePeriodEnd?: number;
-}> {
-  return {
-    status: 'pending',
-    confirmations: 0,
-    requiredConfirmations: 45818,
-  };
+export function mapChildToParentStatus(status: ChildToParentMessageStatus): {
+  bridgeStatus: BridgeStatus;
+  statusText: string;
+  isClaimable: boolean;
+} {
+  switch (status) {
+    case ChildToParentMessageStatus.UNCONFIRMED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.L1_INITIATED,
+        statusText: 'Waiting for L2 block confirmation',
+        isClaimable: false,
+      };
+    case ChildToParentMessageStatus.CONFIRMED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.CHALLENGE_PERIOD,
+        statusText: 'In challenge period (~7 days)',
+        isClaimable: false,
+      };
+    case ChildToParentMessageStatus.EXECUTED:
+      return {
+        bridgeStatus: BRIDGE_STATUS.COMPLETED,
+        statusText: 'Successfully claimed on L1',
+        isClaimable: false,
+      };
+    default:
+      return {
+        bridgeStatus: BRIDGE_STATUS.PENDING,
+        statusText: 'Unknown status',
+        isClaimable: false,
+      };
+  }
+}
+
+export async function getL1ToL2MessageStatus(l1TxHash: string): Promise<MessageStatusResult> {
+  try {
+    const l1Provider = await getL1Provider();
+    const l2Provider = await getL2Provider();
+    
+    const receipt = await l1Provider.getTransactionReceipt(l1TxHash);
+    if (!receipt) {
+      return {
+        status: 'unknown',
+        statusText: 'Transaction not found',
+        retryable: false,
+      };
+    }
+
+    const { ParentTransactionReceipt } = await import('@arbitrum/sdk');
+    const parentReceipt = new ParentTransactionReceipt(receipt);
+    
+    const messages = await parentReceipt.getParentToChildMessages(l2Provider);
+    
+    if (messages.length === 0) {
+      return {
+        status: 'unknown',
+        statusText: 'No cross-chain messages found',
+        retryable: false,
+      };
+    }
+
+    const message = messages[0];
+    const statusResult = await message.waitForStatus();
+    const mappedStatus = mapParentToChildStatus(statusResult.status);
+    
+    return {
+      status: statusResult.status,
+      statusText: mappedStatus.statusText,
+      canRedeem: mappedStatus.canRedeem,
+      retryable: mappedStatus.canRedeem,
+    };
+  } catch (error) {
+    console.error('Error getting L1→L2 message status:', error);
+    return {
+      status: 'unknown',
+      statusText: 'Failed to fetch message status',
+      retryable: false,
+    };
+  }
+}
+
+export async function getL2ToL1MessageStatus(l2TxHash: string): Promise<MessageStatusResult> {
+  try {
+    const l1Provider = await getL1Provider();
+    const l2Provider = await getL2Provider();
+    
+    const receipt = await l2Provider.getTransactionReceipt(l2TxHash);
+    if (!receipt) {
+      return {
+        status: 'unknown',
+        statusText: 'Transaction not found',
+        confirmations: 0,
+        requiredConfirmations: 45818,
+        isClaimable: false,
+      };
+    }
+
+    const { ChildTransactionReceipt } = await import('@arbitrum/sdk');
+    const childReceipt = new ChildTransactionReceipt(receipt);
+    
+    const messages = await childReceipt.getChildToParentMessages(l1Provider);
+    
+    if (messages.length === 0) {
+      return {
+        status: 'unknown',
+        statusText: 'No cross-chain messages found',
+        confirmations: 0,
+        requiredConfirmations: 45818,
+        isClaimable: false,
+      };
+    }
+
+    const message = messages[0];
+    const status = await message.status(l2Provider);
+    const mappedStatus = mapChildToParentStatus(status);
+    
+    const l2BlockNumber = await l2Provider.getBlockNumber();
+    const txBlockNumber = receipt.blockNumber;
+    const confirmations = l2BlockNumber - txBlockNumber;
+    
+    const isClaimable = status === ChildToParentMessageStatus.CONFIRMED;
+    const challengePeriodBlocks = 45818;
+    const blocksRemaining = Math.max(0, challengePeriodBlocks - confirmations);
+    const secondsPerBlock = 0.25;
+    const challengePeriodEnd = blocksRemaining > 0 
+      ? Date.now() + (blocksRemaining * secondsPerBlock * 1000)
+      : undefined;
+    
+    return {
+      status,
+      statusText: mappedStatus.statusText,
+      confirmations,
+      requiredConfirmations: challengePeriodBlocks,
+      isClaimable,
+      challengePeriodEnd,
+    };
+  } catch (error) {
+    console.error('Error getting L2→L1 message status:', error);
+    return {
+      status: 'unknown',
+      statusText: 'Failed to fetch message status',
+      confirmations: 0,
+      requiredConfirmations: 45818,
+      isClaimable: false,
+    };
+  }
+}
+
+export async function redeemRetryableTicket(l1TxHash: string): Promise<string | null> {
+  try {
+    const l2Signer = await getL2Signer();
+    if (!l2Signer) {
+      throw new Error('Please connect to Arbitrum One to redeem');
+    }
+
+    const l1Provider = await getL1Provider();
+    const l2Provider = await getL2Provider();
+    
+    const receipt = await l1Provider.getTransactionReceipt(l1TxHash);
+    if (!receipt) {
+      throw new Error('L1 transaction not found');
+    }
+
+    const { ParentTransactionReceipt } = await import('@arbitrum/sdk');
+    const parentReceipt = new ParentTransactionReceipt(receipt);
+    
+    const messages = await parentReceipt.getParentToChildMessages(l2Signer);
+    
+    if (messages.length === 0) {
+      throw new Error('No retryable tickets found');
+    }
+
+    const message = messages[0];
+    const statusResult = await message.waitForStatus();
+    
+    if (statusResult.status === ParentToChildMessageStatus.REDEEMED) {
+      throw new Error('Retryable ticket already redeemed');
+    }
+    
+    if (statusResult.status === ParentToChildMessageStatus.EXPIRED) {
+      throw new Error('Retryable ticket has expired');
+    }
+
+    const redeemTx = await message.redeem();
+    const redeemReceipt = await redeemTx.wait();
+    
+    return redeemReceipt.hash;
+  } catch (error: any) {
+    console.error('Error redeeming retryable ticket:', error);
+    throw error;
+  }
+}
+
+export async function claimWithdrawal(l2TxHash: string): Promise<string | null> {
+  try {
+    const l1Signer = await getL1Signer();
+    if (!l1Signer) {
+      throw new Error('Please connect to Ethereum Mainnet to claim');
+    }
+
+    const l1Provider = await getL1Provider();
+    const l2Provider = await getL2Provider();
+    
+    const receipt = await l2Provider.getTransactionReceipt(l2TxHash);
+    if (!receipt) {
+      throw new Error('L2 transaction not found');
+    }
+
+    const { ChildTransactionReceipt, ChildToParentMessageStatus } = await import('@arbitrum/sdk');
+    const childReceipt = new ChildTransactionReceipt(receipt);
+    
+    const messages = await childReceipt.getChildToParentMessages(l1Signer);
+    
+    if (messages.length === 0) {
+      throw new Error('No withdrawal messages found');
+    }
+
+    const message = messages[0];
+    const status = await message.status(l2Provider);
+    
+    if (status === ChildToParentMessageStatus.EXECUTED) {
+      throw new Error('Withdrawal already claimed');
+    }
+    
+    if (status !== ChildToParentMessageStatus.CONFIRMED) {
+      throw new Error('Withdrawal not yet ready to claim. Still in challenge period.');
+    }
+
+    const executeTx = await message.execute(l2Provider);
+    const executeReceipt = await executeTx.wait();
+    
+    return executeReceipt.hash;
+  } catch (error: any) {
+    console.error('Error claiming withdrawal:', error);
+    throw error;
+  }
 }
 
 export function formatBridgeAmount(amount: bigint, decimals: number = 18): string {
@@ -347,4 +666,43 @@ export function updateBridgeTransaction(id: string, updates: Partial<BridgeTrans
 
 export function generateTransactionId(): string {
   return `bridge_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export function getChallengePeriodRemaining(claimableAt: number): {
+  days: number;
+  hours: number;
+  minutes: number;
+  isReady: boolean;
+  totalSeconds: number;
+} {
+  const now = Date.now();
+  const remaining = Math.max(0, claimableAt - now);
+  const totalSeconds = Math.floor(remaining / 1000);
+  
+  const days = Math.floor(totalSeconds / (24 * 60 * 60));
+  const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60));
+  const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+  
+  return {
+    days,
+    hours,
+    minutes,
+    isReady: remaining === 0,
+    totalSeconds,
+  };
+}
+
+export function formatChallengePeriod(claimableAt: number): string {
+  const { days, hours, minutes, isReady } = getChallengePeriodRemaining(claimableAt);
+  
+  if (isReady) {
+    return 'Ready to claim';
+  }
+  
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+  
+  return `${parts.join(' ')} remaining`;
 }
