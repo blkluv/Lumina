@@ -359,9 +359,9 @@ export default function Live() {
                           </td>
                         </tr>
                         <tr>
-                          <td className="p-3 text-muted-foreground">Software Required</td>
+                          <td className="p-3 text-muted-foreground">No Software Needed</td>
                           <td className="p-3 text-center">
-                            <X className="h-4 w-4 text-amber-500 mx-auto" />
+                            <X className="h-4 w-4 text-muted-foreground mx-auto" />
                           </td>
                           <td className="p-3 text-center">
                             <Check className="h-4 w-4 text-primary mx-auto" />
@@ -432,8 +432,11 @@ export default function Live() {
                         <div className="space-y-2">
                           <p className="font-medium text-foreground">Step 3: Configure OBS</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
-                            <li>Click "Open in OBS" button (auto-configures settings)</li>
-                            <li>Or manually: Settings → Stream → Custom → paste Server URL and Key</li>
+                            <li>Open OBS/Streamlabs and go to Settings → Stream</li>
+                            <li>Select "Custom..." as the Service</li>
+                            <li>Paste the Server URL into the "Server" field</li>
+                            <li>Paste the Stream Key into the "Stream Key" field</li>
+                            <li>Click Apply and OK to save</li>
                           </ul>
                         </div>
                         <div className="space-y-2">
@@ -459,6 +462,14 @@ export default function Live() {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="text-sm text-muted-foreground space-y-3">
+                        {!providers?.methods.browser && (
+                          <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20 mb-3">
+                            <p className="text-amber-600 dark:text-amber-400 text-xs">
+                              <strong>Note:</strong> Browser streaming is currently unavailable. 
+                              Platform administrators need to configure Cloudflare Stream to enable this feature.
+                            </p>
+                          </div>
+                        )}
                         <div className="space-y-2">
                           <p className="font-medium text-foreground">Step 1: Allow Permissions</p>
                           <p>Your browser will ask for camera and microphone access. Click "Allow".</p>
