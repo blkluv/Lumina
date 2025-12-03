@@ -409,7 +409,7 @@ export default function LiveStreamViewer() {
   
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-6xl mx-auto p-4 lg:p-6">
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
