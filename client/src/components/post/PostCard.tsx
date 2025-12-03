@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Coins, Play } from "lucide-react";
+import { Heart, MessageCircle, Share2, Repeat2, MoreHorizontal, Coins, Play, Copy, Check, Twitter, Facebook, Link as LinkIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,11 +9,22 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TipModal } from "@/components/modals/TipModal";
 import { CommentModal } from "@/components/modals/CommentModal";
 import { useAuth } from "@/lib/authContext";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PostWithAuthor } from "@shared/schema";
 
 interface PostCardProps {
@@ -42,10 +53,19 @@ function formatTimeAgo(date: Date | string | null): string {
 
 export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCardProps) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likeCount || 0);
+  const [shareCount, setShareCount] = useState(post.shareCount || 0);
   const [showTipModal, setShowTipModal] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showRepostDialog, setShowRepostDialog] = useState(false);
+  const [isReposting, setIsReposting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const postUrl = `${window.location.origin}/post/${post.id}`;
+  const shareText = `Check out this post by @${post.author.username} on Lumina!`;
 
   const handleLike = () => {
     setLiked(!liked);
@@ -56,6 +76,95 @@ export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCar
   const handleComment = () => {
     setShowCommentModal(true);
     onComment?.(post.id);
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(postUrl);
+      setCopied(true);
+      toast({
+        title: "Link copied!",
+        description: "Post link has been copied to your clipboard.",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        description: "Could not copy the link. Please try again.",
+        variant: "destructive",
+      });
+    }
+    onShare?.(post.id);
+  };
+
+  const handleShareTwitter = () => {
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(postUrl)}`;
+    window.open(twitterUrl, "_blank", "noopener,noreferrer");
+    onShare?.(post.id);
+  };
+
+  const handleShareFacebook = () => {
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(postUrl)}`;
+    window.open(facebookUrl, "_blank", "noopener,noreferrer");
+    onShare?.(post.id);
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Post by ${post.author.displayName || post.author.username}`,
+          text: shareText,
+          url: postUrl,
+        });
+        onShare?.(post.id);
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          handleCopyLink();
+        }
+      }
+    } else {
+      handleCopyLink();
+    }
+  };
+
+  const handleRepost = async () => {
+    if (!user) {
+      toast({
+        title: "Login required",
+        description: "Please log in to repost content.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsReposting(true);
+    try {
+      await apiRequest("POST", "/api/posts", {
+        content: `Reposted from @${post.author.username}:\n\n${post.content || ""}`,
+        postType: "text",
+        originalPostId: post.id,
+      });
+      
+      setShareCount((prev) => prev + 1);
+      await queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      
+      toast({
+        title: "Reposted!",
+        description: "The post has been shared to your profile.",
+      });
+      
+      setShowRepostDialog(false);
+      onRepost?.(post.id);
+    } catch (err) {
+      toast({
+        title: "Repost failed",
+        description: "Could not repost. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReposting(false);
+    }
   };
 
   return (
@@ -164,29 +273,56 @@ export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCar
                     data-testid="button-comment"
                   >
                     <MessageCircle className="h-4 w-4" />
-                    <span className="text-sm">{post.commentCount > 0 ? post.commentCount : ""}</span>
+                    <span className="text-sm">{(post.commentCount || 0) > 0 ? post.commentCount : ""}</span>
                   </Button>
 
                   <Button
                     variant="ghost"
                     size="sm"
                     className="gap-1.5 h-8 px-2"
-                    onClick={() => onRepost?.(post.id)}
+                    onClick={() => setShowRepostDialog(true)}
                     data-testid="button-repost"
                   >
                     <Repeat2 className="h-4 w-4" />
-                    <span className="text-sm">{post.shareCount > 0 ? post.shareCount : ""}</span>
+                    <span className="text-sm">{shareCount > 0 ? shareCount : ""}</span>
                   </Button>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1.5 h-8 px-2"
-                    onClick={() => onShare?.(post.id)}
-                    data-testid="button-share"
-                  >
-                    <Share2 className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenu open={showShareMenu} onOpenChange={setShowShareMenu}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 h-8 px-2"
+                        data-testid="button-share"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" data-testid="share-menu">
+                      <DropdownMenuItem onClick={handleCopyLink} data-testid="button-copy-link">
+                        {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                        {copied ? "Copied!" : "Copy link"}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleShareTwitter} data-testid="button-share-twitter">
+                        <Twitter className="h-4 w-4 mr-2" />
+                        Share on X
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleShareFacebook} data-testid="button-share-facebook">
+                        <Facebook className="h-4 w-4 mr-2" />
+                        Share on Facebook
+                      </DropdownMenuItem>
+                      {typeof navigator !== 'undefined' && 'share' in navigator && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={handleNativeShare} data-testid="button-share-native">
+                            <LinkIcon className="h-4 w-4 mr-2" />
+                            More options...
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 {user?.id !== post.author.id && (
@@ -218,6 +354,39 @@ export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCar
         onOpenChange={setShowCommentModal}
         post={post}
       />
+
+      <Dialog open={showRepostDialog} onOpenChange={setShowRepostDialog}>
+        <DialogContent data-testid="repost-dialog">
+          <DialogHeader>
+            <DialogTitle>Repost this content?</DialogTitle>
+            <DialogDescription>
+              This will share the post by @{post.author.username} to your profile for your followers to see.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="p-3 rounded-lg bg-muted/50 border text-sm">
+            <p className="font-medium mb-1">{post.author.displayName || post.author.username}</p>
+            <p className="text-muted-foreground line-clamp-3">{post.content}</p>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowRepostDialog(false)}
+              data-testid="button-cancel-repost"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRepost}
+              disabled={isReposting}
+              data-testid="button-confirm-repost"
+            >
+              {isReposting ? "Reposting..." : "Repost"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

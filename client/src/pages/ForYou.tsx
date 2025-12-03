@@ -1,14 +1,22 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { Heart, MessageCircle, Share2, Coins, User, Play, Pause, Volume2, VolumeX, ChevronUp, ChevronDown, Sparkles, Award, Loader2 } from "lucide-react";
+import { Heart, MessageCircle, Share2, Coins, User, Play, Pause, Volume2, VolumeX, ChevronUp, ChevronDown, Sparkles, Award, Loader2, Copy, Check, Twitter, Facebook, Link as LinkIcon } from "lucide-react";
 import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Header } from "@/components/layout/Header";
 import { TipModal } from "@/components/modals/TipModal";
 import { CommentModal } from "@/components/modals/CommentModal";
 import { useAuth } from "@/lib/authContext";
+import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { PostWithAuthor } from "@shared/schema";
@@ -25,6 +33,7 @@ function VideoCard({
   onFollow: (userId: string) => void;
 }) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -33,6 +42,57 @@ function VideoCard({
   const [showTipModal, setShowTipModal] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [showCaption, setShowCaption] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const postUrl = `${window.location.origin}/post/${post.id}`;
+  const shareText = `Check out this video by @${post.author.username} on Lumina!`;
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(postUrl);
+      setCopied(true);
+      toast({
+        title: "Link copied!",
+        description: "Video link has been copied to your clipboard.",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        description: "Could not copy the link. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleShareTwitter = () => {
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(postUrl)}`;
+    window.open(twitterUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleShareFacebook = () => {
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(postUrl)}`;
+    window.open(facebookUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Video by ${post.author.displayName || post.author.username}`,
+          text: shareText,
+          url: postUrl,
+        });
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          handleCopyLink();
+        }
+      }
+    } else {
+      handleCopyLink();
+    }
+  };
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -218,16 +278,44 @@ function VideoCard({
             </button>
           )}
 
-          <button
-            className="flex flex-col items-center gap-1 group"
-            data-testid="button-share-video"
-          >
-            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center transition-all group-hover:bg-white/20">
-              <Share2 className="h-6 w-6 text-white transition-transform group-hover:scale-110" />
-            </div>
-            <span className="text-white text-xs font-medium">Share</span>
-            <span className="text-primary/80 text-[9px]">+3 AXM</span>
-          </button>
+          <DropdownMenu open={showShareMenu} onOpenChange={setShowShareMenu}>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex flex-col items-center gap-1 group"
+                data-testid="button-share-video"
+              >
+                <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center transition-all group-hover:bg-white/20">
+                  <Share2 className="h-6 w-6 text-white transition-transform group-hover:scale-110" />
+                </div>
+                <span className="text-white text-xs font-medium">Share</span>
+                <span className="text-primary/80 text-[9px]">+3 AXM</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" side="left" className="w-48" data-testid="share-menu-video">
+              <DropdownMenuItem onClick={handleCopyLink} data-testid="button-copy-link-video">
+                {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                {copied ? "Copied!" : "Copy link"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleShareTwitter} data-testid="button-share-twitter-video">
+                <Twitter className="h-4 w-4 mr-2" />
+                Share on X
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleShareFacebook} data-testid="button-share-facebook-video">
+                <Facebook className="h-4 w-4 mr-2" />
+                Share on Facebook
+              </DropdownMenuItem>
+              {typeof navigator !== 'undefined' && 'share' in navigator && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleNativeShare} data-testid="button-share-native-video">
+                    <LinkIcon className="h-4 w-4 mr-2" />
+                    More options...
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="absolute top-4 right-4 flex gap-2">
