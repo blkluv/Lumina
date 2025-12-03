@@ -444,6 +444,48 @@ export class ContentModerationService {
 
     return queue;
   }
+
+  async processViolation(
+    userId: string,
+    contentType: "post" | "comment",
+    contentId: string,
+    moderationResult: ModerationResult,
+    contentSnapshot: string
+  ): Promise<void> {
+    try {
+      if (!moderationResult.isViolation) return;
+
+      const violationData: any = {
+        userId,
+        violationType: moderationResult.violationType as any || "other",
+        severity: moderationResult.severity,
+        status: "flagged",
+        aiConfidenceScore: moderationResult.confidenceScore,
+        aiAnalysis: moderationResult.explanation,
+        contentSnapshot,
+      };
+
+      if (contentType === "post") {
+        violationData.postId = contentId;
+      } else {
+        violationData.commentId = contentId;
+      }
+
+      await db.insert(contentViolations).values(violationData);
+
+      if (moderationResult.severity === "medium") {
+        await this.addToModerationQueue(
+          contentType === "post" ? contentId : null,
+          contentType === "comment" ? contentId : null,
+          userId,
+          contentType,
+          1
+        );
+      }
+    } catch (error) {
+      console.error("Error processing violation:", error);
+    }
+  }
 }
 
 export const contentModerationService = new ContentModerationService();

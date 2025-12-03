@@ -140,11 +140,32 @@ export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCar
 
     setIsReposting(true);
     try {
-      await apiRequest("POST", "/api/posts", {
-        content: `Reposted from @${post.author.username}:\n\n${post.content || ""}`,
-        postType: "text",
+      // Build repost content based on original post type
+      let repostContent = `Reposted from @${post.author.username}`;
+      if (post.content) {
+        repostContent += `:\n\n${post.content}`;
+      }
+      
+      // For media posts, include the original media
+      const repostData: Record<string, unknown> = {
+        content: repostContent,
         originalPostId: post.id,
-      });
+      };
+      
+      // Preserve the original media for image/video reposts
+      if (post.postType === "video" && post.mediaUrl) {
+        repostData.postType = "video";
+        repostData.mediaUrl = post.mediaUrl;
+        repostData.thumbnailUrl = post.thumbnailUrl;
+        repostData.videoDuration = post.videoDuration;
+      } else if (post.postType === "image" && post.mediaUrl) {
+        repostData.postType = "image";
+        repostData.mediaUrl = post.mediaUrl;
+      } else {
+        repostData.postType = "text";
+      }
+      
+      await apiRequest("POST", "/api/posts", repostData);
       
       setShareCount((prev) => prev + 1);
       await queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
@@ -366,7 +387,20 @@ export function PostCard({ post, onLike, onComment, onShare, onRepost }: PostCar
           
           <div className="p-3 rounded-lg bg-muted/50 border text-sm">
             <p className="font-medium mb-1">{post.author.displayName || post.author.username}</p>
-            <p className="text-muted-foreground line-clamp-3">{post.content}</p>
+            {post.content && (
+              <p className="text-muted-foreground line-clamp-3 mb-2">{post.content}</p>
+            )}
+            {post.postType === "video" && post.mediaUrl && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Play className="h-4 w-4" />
+                <span>Video content will be included</span>
+              </div>
+            )}
+            {post.postType === "image" && post.mediaUrl && (
+              <div className="mt-2 rounded overflow-hidden max-h-32">
+                <img src={post.mediaUrl} alt="Post preview" className="w-full object-cover" />
+              </div>
+            )}
           </div>
           
           <DialogFooter>
