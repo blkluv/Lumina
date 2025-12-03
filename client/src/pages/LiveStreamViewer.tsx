@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/authContext";
 import { useWallet } from "@/lib/walletContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { HLSVideoPlayer } from "@/components/HLSVideoPlayer";
 import { 
   Radio, 
   Eye, 
@@ -23,6 +24,8 @@ import {
   Gift,
   MessageCircle,
   AlertCircle,
+  Copy,
+  Check,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -34,8 +37,10 @@ interface LiveStream {
   title: string;
   description: string | null;
   thumbnailUrl: string | null;
-  dailyRoomName: string | null;
-  dailyRoomUrl: string | null;
+  muxPlaybackId: string | null;
+  muxStreamKey: string | null;
+  rtmpUrl: string | null;
+  streamingProvider: string | null;
   status: string;
   viewerCount: number;
   totalTips: string;
@@ -55,9 +60,12 @@ interface StreamMessage {
   sender?: User;
 }
 
-interface StreamToken {
-  token: string;
-  roomUrl: string;
+interface StreamTokenResponse {
+  provider: "mux";
+  playbackUrl: string;
+  thumbnailUrl?: string;
+  rtmpUrl?: string;
+  streamKey?: string;
   isOwner: boolean;
 }
 
@@ -70,37 +78,28 @@ const TIP_AMOUNTS = [
   { amount: "100", label: "100 AXM" },
 ];
 
-function DailyVideoPlayer({ 
+function MuxVideoPlayer({ 
   streamId, 
-  isHost, 
-  onLeave 
+  isHost,
 }: { 
   streamId: string; 
-  isHost: boolean; 
-  onLeave: () => void;
+  isHost: boolean;
 }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
 
-  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamToken>({
-    queryKey: [`/api/streams/${streamId}/token`],
+  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamTokenResponse>({
+    queryKey: ["/api/streams", streamId, "token"],
     enabled: !!streamId,
-    retry: false,
+    retry: 3,
+    refetchInterval: 30000,
   });
 
-  // Build the iframe URL with token
-  const iframeUrl = tokenData 
-    ? `${tokenData.roomUrl}?t=${tokenData.token}` 
-    : null;
-
-  const handleIframeLoad = () => {
-    setIsLoading(false);
-  };
-
-  const handleIframeError = () => {
-    setError("Failed to load video stream");
-    setIsLoading(false);
+  const copyToClipboard = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast({ title: "Copied to clipboard!" });
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (tokenLoading) {
@@ -111,12 +110,12 @@ function DailyVideoPlayer({
     );
   }
 
-  if (tokenError || error || !iframeUrl) {
+  if (tokenError || !tokenData?.playbackUrl) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <p className="text-white text-center mb-4">
-          {error || "Failed to load stream. Please try again."}
+          Failed to load stream. Please try again.
         </p>
         <Button onClick={() => window.location.reload()}>
           Retry
@@ -127,20 +126,49 @@ function DailyVideoPlayer({
 
   return (
     <div className="relative w-full h-full">
-      <iframe
-        ref={iframeRef}
-        src={iframeUrl}
-        allow="camera; microphone; fullscreen; display-capture; autoplay"
-        className="w-full h-full border-0 rounded-xl bg-black"
-        onLoad={handleIframeLoad}
-        onError={handleIframeError}
+      <HLSVideoPlayer
+        src={tokenData.playbackUrl}
+        poster={tokenData.thumbnailUrl}
+        className="w-full h-full rounded-xl"
+        autoPlay={true}
+        muted={false}
       />
       
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80 pointer-events-none rounded-xl">
-          <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-white">Connecting to stream...</p>
+      {isHost && tokenData.streamKey && (
+        <div className="absolute bottom-20 left-4 right-4 bg-black/90 rounded-lg p-4 backdrop-blur">
+          <h4 className="text-sm font-semibold text-white mb-2">Broadcast Settings (Host Only)</h4>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">RTMP URL:</span>
+              <code className="bg-white/10 px-2 py-1 rounded text-white flex-1 truncate">
+                {tokenData.rtmpUrl}
+              </code>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-6 w-6"
+                onClick={() => copyToClipboard(tokenData.rtmpUrl || "")}
+              >
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Stream Key:</span>
+              <code className="bg-white/10 px-2 py-1 rounded text-white flex-1 truncate">
+                {tokenData.streamKey.substring(0, 20)}...
+              </code>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-6 w-6"
+                onClick={() => copyToClipboard(tokenData.streamKey || "")}
+              >
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            </div>
+            <p className="text-muted-foreground mt-2">
+              Use OBS, Streamlabs, or any RTMP broadcaster to go live!
+            </p>
           </div>
         </div>
       )}
@@ -228,12 +256,8 @@ export default function LiveStreamViewer() {
     sendMessageMutation.mutate(message.trim());
   };
 
-  const handleLeaveStream = () => {
-    refetchStream();
-  };
-  
   const isHost = user?.id === stream?.hostId;
-  const hasVideoRoom = !!stream?.dailyRoomName;
+  const hasMuxStream = !!stream?.muxPlaybackId;
   
   if (isLoading) {
     return (
@@ -261,38 +285,25 @@ export default function LiveStreamViewer() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
-              {stream.status === "live" && hasVideoRoom && user ? (
-                <DailyVideoPlayer 
+              {stream.status === "live" && hasMuxStream ? (
+                <MuxVideoPlayer 
                   streamId={streamId!} 
                   isHost={isHost}
-                  onLeave={handleLeaveStream}
                 />
-              ) : stream.status === "live" && !hasVideoRoom ? (
+              ) : stream.status === "live" && !hasMuxStream ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
                   <div className="p-4 rounded-full bg-primary/20 mb-4">
                     <Radio className="h-12 w-12 text-primary animate-pulse" />
                   </div>
                   <h3 className="text-xl font-bold text-white mb-2">
-                    {isHost ? "You're Live!" : "Live Stream"}
+                    {isHost ? "Setting up stream..." : "Stream starting soon..."}
                   </h3>
                   <p className="text-white/70 text-center max-w-md">
                     {isHost 
-                      ? "Video room not available. Chat and tips are still active!"
-                      : "Video is not available for this stream. Enjoy the chat!"}
+                      ? "Please wait while we set up your stream. You'll receive RTMP details shortly."
+                      : "The host is preparing to go live. Please wait..."}
                   </p>
-                </div>
-              ) : stream.status === "live" && !user ? (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
-                  <div className="p-4 rounded-full bg-primary/20 mb-4">
-                    <Radio className="h-12 w-12 text-primary animate-pulse" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Live Now</h3>
-                  <p className="text-white/70 text-center max-w-md mb-4">
-                    Sign in to watch this stream and interact with chat
-                  </p>
-                  <Button onClick={() => navigate("/auth")}>
-                    Sign In to Watch
-                  </Button>
+                  <Loader2 className="h-6 w-6 animate-spin text-primary mt-4" />
                 </div>
               ) : stream.thumbnailUrl ? (
                 <img

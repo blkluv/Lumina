@@ -1393,26 +1393,42 @@ export async function registerRoutes(app: Express): Promise<void> {
         thumbnailUrl,
       });
 
-      // Create Daily.co room for the stream
-      try {
-        console.log("Creating Daily.co room for stream:", stream.id);
-        const dailyService = await import("./services/daily");
-        const room = await dailyService.createRoom(stream.id);
-        console.log("Daily.co room created:", room.name, room.url);
-        
-        // Update stream with Daily.co room info
-        const updated = await storage.updateLiveStream(stream.id, {
-          dailyRoomName: room.name,
-          dailyRoomUrl: room.url,
-        });
-        console.log("Stream updated with room info:", updated?.dailyRoomName);
-        
-        stream.dailyRoomName = room.name;
-        stream.dailyRoomUrl = room.url;
-      } catch (dailyError: any) {
-        console.error("Failed to create Daily.co room:", dailyError?.message || dailyError);
-        console.error("Full error:", JSON.stringify(dailyError, null, 2));
-        // Continue without video - stream will still work for chat/tips
+      // Create Mux live stream (preferred) or fall back to Daily.co
+      const hasMuxCredentials = process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET;
+      
+      if (hasMuxCredentials) {
+        try {
+          console.log("Creating Mux live stream for:", stream.id);
+          const muxService = await import("./services/mux");
+          const muxStream = await muxService.createMuxLiveStream();
+          console.log("Mux live stream created:", muxStream.id, muxStream.playbackId);
+          
+          // Update stream with Mux info
+          await storage.updateLiveStream(stream.id, {
+            muxLiveStreamId: muxStream.id,
+            muxPlaybackId: muxStream.playbackId,
+            muxStreamKey: muxStream.streamKey,
+            rtmpUrl: muxStream.rtmpUrl,
+            streamingProvider: "mux",
+          });
+          
+          // Return stream with Mux info for host
+          res.status(201).json({
+            ...stream,
+            muxLiveStreamId: muxStream.id,
+            muxPlaybackId: muxStream.playbackId,
+            muxStreamKey: muxStream.streamKey,
+            rtmpUrl: muxStream.rtmpUrl,
+            streamingProvider: "mux",
+            playbackUrl: `https://stream.mux.com/${muxStream.playbackId}.m3u8`,
+          });
+          return;
+        } catch (muxError: any) {
+          console.error("Failed to create Mux stream:", muxError?.message || muxError);
+          // Return stream without video - chat and tips still work
+          res.status(201).json(stream);
+          return;
+        }
       }
 
       res.status(201).json(stream);
@@ -1421,16 +1437,12 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Get Daily.co meeting token for stream
+  // Get stream playback info (Mux HLS)
   app.get("/api/streams/:id/token", requireAuth, async (req, res) => {
     try {
       const stream = await storage.getLiveStream(req.params.id);
       if (!stream) {
         return res.status(404).json({ error: "Stream not found" });
-      }
-      
-      if (!stream.dailyRoomName) {
-        return res.status(400).json({ error: "Stream has no video room" });
       }
 
       const user = await storage.getUser(req.session.userId!);
@@ -1440,17 +1452,32 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       const isOwner = stream.hostId === req.session.userId;
       
-      const dailyService = await import("./services/daily");
-      const token = await dailyService.createMeetingToken(stream.dailyRoomName, {
-        userId: user.id,
-        userName: user.displayName || user.username,
-        isOwner,
-      });
-
-      res.json({ 
-        token, 
-        roomUrl: stream.dailyRoomUrl,
-        isOwner 
+      // Check if Mux stream is configured
+      if (!stream.muxPlaybackId) {
+        return res.status(400).json({ error: "Stream is not configured for video playback" });
+      }
+      
+      // Return HLS playback URL
+      const playbackUrl = `https://stream.mux.com/${stream.muxPlaybackId}.m3u8`;
+      const thumbnailUrl = `https://image.mux.com/${stream.muxPlaybackId}/thumbnail.jpg`;
+      
+      // If owner, also return stream key for broadcasting
+      if (isOwner) {
+        return res.json({
+          provider: "mux",
+          playbackUrl,
+          thumbnailUrl,
+          rtmpUrl: stream.rtmpUrl || "rtmps://global-live.mux.com:443/app",
+          streamKey: stream.muxStreamKey,
+          isOwner: true,
+        });
+      }
+      
+      return res.json({
+        provider: "mux",
+        playbackUrl,
+        thumbnailUrl,
+        isOwner: false,
       });
     } catch (error) {
       console.error("Failed to get stream token:", error);
@@ -1468,13 +1495,14 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(403).json({ error: "Not authorized to end this stream" });
       }
 
-      // Delete Daily.co room
-      if (stream.dailyRoomName) {
+      // Disable Mux live stream (keeps recording for VOD)
+      if (stream.muxLiveStreamId) {
         try {
-          const dailyService = await import("./services/daily");
-          await dailyService.deleteRoom(stream.dailyRoomName);
-        } catch (dailyError) {
-          console.error("Failed to delete Daily.co room:", dailyError);
+          const muxService = await import("./services/mux");
+          await muxService.disableMuxLiveStream(stream.muxLiveStreamId);
+          console.log("Mux stream disabled:", stream.muxLiveStreamId);
+        } catch (muxError) {
+          console.error("Failed to disable Mux stream:", muxError);
         }
       }
 
@@ -1482,6 +1510,43 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to end stream" });
+    }
+  });
+
+  // Get Mux stream status (for checking if broadcaster is connected)
+  app.get("/api/streams/:id/status", async (req, res) => {
+    try {
+      const stream = await storage.getLiveStream(req.params.id);
+      if (!stream) {
+        return res.status(404).json({ error: "Stream not found" });
+      }
+
+      // For Mux streams, check actual broadcast status
+      if (stream.muxLiveStreamId) {
+        try {
+          const muxService = await import("./services/mux");
+          const status = await muxService.getMuxStreamStatus(stream.muxLiveStreamId);
+          return res.json({
+            provider: "mux",
+            streamStatus: stream.status,
+            broadcastStatus: status.status,
+            isLive: status.status === "active",
+            hasRecordings: status.recentAssetIds.length > 0,
+          });
+        } catch (muxError) {
+          console.error("Failed to get Mux status:", muxError);
+        }
+      }
+
+      // Fallback for streams without Mux
+      res.json({
+        provider: "none",
+        streamStatus: stream.status,
+        broadcastStatus: stream.status,
+        isLive: stream.status === "live",
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get stream status" });
     }
   });
 
