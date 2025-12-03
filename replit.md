@@ -45,6 +45,13 @@ The platform features a dark emerald theme with glowing accents, using HSL 160 8
   - Automatic VOD recording of streams
   - Quality selection and fullscreen controls
   - Integration with stream chat and tipping
+- **Cloudflare Stream** (Optional): For browser-based WebRTC streaming (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_API_TOKEN`). Features include:
+  - WHIP protocol for browser-to-server streaming (no software required)
+  - WHEP protocol for WebRTC-based playback
+  - Sub-second latency for interactive streams
+  - Automatic camera/microphone selection in browser
+  - Screen sharing support
+  - Fallback option when users can't use OBS/Streamlabs
 
 ## Smart Contract Integration
 
@@ -78,6 +85,12 @@ All contracts are deployed on Arbitrum One (Chain ID: 42161). Source: https://gi
 - **WHITEPAPER.md** - Comprehensive professional whitepaper covering platform vision, architecture, tokenomics, smart contracts, governance, and roadmap
 
 ## Recent Changes
+- **Dual-Provider Streaming Architecture** (December 2025): Added support for both professional RTMP streaming (via Mux) and browser-based WebRTC streaming (via Cloudflare Stream). Users can choose between:
+  - **OBS/Streamlabs (Professional)**: Best quality, RTMP ingest via Mux with HLS delivery, one-click software auto-configuration
+  - **Browser (Quick Start)**: Go live instantly using webcam/microphone, WHIP protocol via Cloudflare Stream with WHEP playback
+  - Key new files: `server/services/cloudflare-stream.ts`, `client/src/components/WHIPStreamPublisher.tsx`, `client/src/components/WHEPVideoPlayer.tsx`
+  - Database extended with `cloudflare_input_id`, `cloudflare_whip_url`, `cloudflare_whep_url` columns
+  - API endpoint `/api/streams/providers` to check available streaming methods
 - **Mux Live Streaming Integration** (December 2025): Replaced Daily.co with Mux for TikTok-style custom streaming. Features include RTMP ingest for broadcasting via OBS/Streamlabs, HLS adaptive bitrate streaming for viewers, custom HLSVideoPlayer component with quality selection and fullscreen controls, low-latency mode, automatic VOD recording, host-only broadcast settings display (RTMP URL + stream key), and seamless integration with chat and tipping. Key files: `server/services/mux.ts`, `client/src/components/HLSVideoPlayer.tsx`, `client/src/pages/LiveStreamViewer.tsx`.
 - **Treasury Dashboard Implementation** (December 2025): Added comprehensive /treasury page with live blockchain balance tracking, USD price conversion via CoinGecko API (with 60-second server-side caching), token distribution visualization, contract addresses with copy functionality, and network information display. Treasury preview section added to landing page.
 - **Price Oracle Integration**: Added /api/price/axm and /api/price/eth endpoints with caching to prevent CoinGecko rate limiting. usePriceOracle hook provides getAXMPrice, getAXMPriceData, and getETHPrice functions with proper fallback handling.

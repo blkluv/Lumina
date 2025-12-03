@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/lib/authContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +22,8 @@ import {
   Loader2,
   Play,
   Video,
+  Monitor,
+  Settings,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -41,6 +44,12 @@ interface LiveStream {
   host?: User;
 }
 
+interface StreamingProviders {
+  providers: { mux: boolean; cloudflare: boolean };
+  methods: { rtmp: boolean; browser: boolean };
+  default: "rtmp" | "browser" | null;
+}
+
 export default function Live() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -48,13 +57,19 @@ export default function Live() {
   const [goLiveOpen, setGoLiveOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [streamingMethod, setStreamingMethod] = useState<"rtmp" | "browser">("rtmp");
   
   const { data: streams = [], isLoading } = useQuery<LiveStream[]>({
     queryKey: ["/api/streams"],
   });
   
+  const { data: providers } = useQuery<StreamingProviders>({
+    queryKey: ["/api/streams/providers"],
+    enabled: !!user,
+  });
+  
   const createStreamMutation = useMutation({
-    mutationFn: async (data: { title: string; description?: string }) => {
+    mutationFn: async (data: { title: string; description?: string; streamingMethod: string }) => {
       const res = await apiRequest("POST", "/api/streams", data);
       return res.json();
     },
@@ -222,6 +237,65 @@ export default function Live() {
                 />
               </div>
               
+              <div className="space-y-2">
+                <Label>How do you want to stream?</Label>
+                <RadioGroup
+                  value={streamingMethod}
+                  onValueChange={(value) => setStreamingMethod(value as "rtmp" | "browser")}
+                  className="grid gap-3"
+                >
+                  <div 
+                    className={cn(
+                      "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                      streamingMethod === "rtmp" 
+                        ? "border-primary bg-primary/5" 
+                        : "border-muted hover:border-muted-foreground/30"
+                    )}
+                    onClick={() => setStreamingMethod("rtmp")}
+                  >
+                    <RadioGroupItem value="rtmp" id="rtmp" className="mt-1" />
+                    <div className="flex-1">
+                      <Label htmlFor="rtmp" className="font-medium cursor-pointer flex items-center gap-2">
+                        <Settings className="h-4 w-4 text-primary" />
+                        OBS / Streamlabs (Professional)
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Best quality. Use OBS Studio, Streamlabs, or any RTMP software.
+                        Perfect for gaming and professional streams.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={cn(
+                      "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                      streamingMethod === "browser" 
+                        ? "border-primary bg-primary/5" 
+                        : "border-muted hover:border-muted-foreground/30",
+                      !providers?.methods.browser && "opacity-50 pointer-events-none"
+                    )}
+                    onClick={() => providers?.methods.browser && setStreamingMethod("browser")}
+                  >
+                    <RadioGroupItem value="browser" id="browser" className="mt-1" disabled={!providers?.methods.browser} />
+                    <div className="flex-1">
+                      <Label htmlFor="browser" className="font-medium cursor-pointer flex items-center gap-2">
+                        <Monitor className="h-4 w-4 text-primary" />
+                        Browser (Quick Start)
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Go live instantly from your browser. No software needed.
+                        Uses your webcam and microphone directly.
+                      </p>
+                      {!providers?.methods.browser && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Browser streaming is not available. Cloudflare Stream credentials required.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </RadioGroup>
+              </div>
+
               <div className="p-4 rounded-lg bg-muted/50 border">
                 <div className="flex items-center gap-3 mb-2">
                   <Radio className="h-5 w-5 text-primary" />
@@ -251,17 +325,20 @@ export default function Live() {
               <Button
                 onClick={() => createStreamMutation.mutate({ 
                   title, 
-                  description: description || undefined 
+                  description: description || undefined,
+                  streamingMethod,
                 })}
                 disabled={!title.trim() || createStreamMutation.isPending}
                 data-testid="button-start-stream"
               >
                 {createStreamMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : streamingMethod === "browser" ? (
+                  <Monitor className="h-4 w-4 mr-2" />
                 ) : (
                   <Radio className="h-4 w-4 mr-2" />
                 )}
-                Go Live
+                {streamingMethod === "browser" ? "Go Live from Browser" : "Go Live"}
               </Button>
             </DialogFooter>
           </DialogContent>

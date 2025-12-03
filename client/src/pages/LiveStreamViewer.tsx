@@ -15,6 +15,8 @@ import { useWallet } from "@/lib/walletContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { HLSVideoPlayer } from "@/components/HLSVideoPlayer";
+import WHIPStreamPublisher from "@/components/WHIPStreamPublisher";
+import WHEPVideoPlayer from "@/components/WHEPVideoPlayer";
 import { 
   Radio, 
   Eye, 
@@ -26,6 +28,9 @@ import {
   AlertCircle,
   Copy,
   Check,
+  ExternalLink,
+  Video,
+  Monitor,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -41,6 +46,9 @@ interface LiveStream {
   muxStreamKey: string | null;
   rtmpUrl: string | null;
   streamingProvider: string | null;
+  cloudflareInputId: string | null;
+  cloudflareWhipUrl: string | null;
+  cloudflareWhepUrl: string | null;
   status: string;
   viewerCount: number;
   totalTips: string;
@@ -61,11 +69,14 @@ interface StreamMessage {
 }
 
 interface StreamTokenResponse {
-  provider: "mux";
-  playbackUrl: string;
+  provider: "mux" | "cloudflare";
+  streamingMethod?: "rtmp" | "browser";
+  playbackUrl?: string;
   thumbnailUrl?: string;
   rtmpUrl?: string;
   streamKey?: string;
+  whipUrl?: string;
+  whepUrl?: string;
   isOwner: boolean;
 }
 
@@ -78,7 +89,7 @@ const TIP_AMOUNTS = [
   { amount: "100", label: "100 AXM" },
 ];
 
-function MuxVideoPlayer({ 
+function StreamPlayer({ 
   streamId, 
   isHost,
 }: { 
@@ -86,7 +97,8 @@ function MuxVideoPlayer({
   isHost: boolean;
 }) {
   const { toast } = useToast();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [showBroadcastSettings, setShowBroadcastSettings] = useState(true);
 
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamTokenResponse>({
     queryKey: ["/api/streams", streamId, "token"],
@@ -95,11 +107,43 @@ function MuxVideoPlayer({
     refetchInterval: 30000,
   });
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (text: string, label: string) => {
     await navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast({ title: "Copied to clipboard!" });
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(label);
+    toast({ title: `${label} copied to clipboard!` });
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const openOBS = () => {
+    if (!tokenData?.rtmpUrl || !tokenData?.streamKey) return;
+    const obsUrl = `obs://settings/stream?server=${encodeURIComponent(tokenData.rtmpUrl)}&key=${encodeURIComponent(tokenData.streamKey)}`;
+    window.open(obsUrl, "_blank");
+    toast({ 
+      title: "Opening OBS Studio...",
+      description: "If OBS doesn't open, make sure it's installed and try copying settings manually."
+    });
+  };
+
+  const openStreamlabs = () => {
+    if (!tokenData?.rtmpUrl || !tokenData?.streamKey) return;
+    const streamlabsUrl = `streamlabs://settings/stream?server=${encodeURIComponent(tokenData.rtmpUrl)}&key=${encodeURIComponent(tokenData.streamKey)}`;
+    window.open(streamlabsUrl, "_blank");
+    toast({ 
+      title: "Opening Streamlabs...",
+      description: "If Streamlabs doesn't open, make sure it's installed and try copying settings manually."
+    });
+  };
+
+  const copyAllSettings = async () => {
+    if (!tokenData?.rtmpUrl || !tokenData?.streamKey) return;
+    const settings = `Server: ${tokenData.rtmpUrl}\nStream Key: ${tokenData.streamKey}`;
+    await navigator.clipboard.writeText(settings);
+    setCopied("all");
+    toast({ 
+      title: "All settings copied!",
+      description: "Paste these into your streaming software."
+    });
+    setTimeout(() => setCopied(null), 2000);
   };
 
   if (tokenLoading) {
@@ -110,7 +154,7 @@ function MuxVideoPlayer({
     );
   }
 
-  if (tokenError || !tokenData?.playbackUrl) {
+  if (tokenError) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
@@ -124,53 +168,137 @@ function MuxVideoPlayer({
     );
   }
 
+  const isBrowserStream = tokenData?.provider === "cloudflare" && tokenData?.streamingMethod === "browser";
+  const isRtmpStream = tokenData?.provider === "mux" && tokenData?.streamingMethod === "rtmp";
+
   return (
     <div className="relative w-full h-full">
-      <HLSVideoPlayer
-        src={tokenData.playbackUrl}
-        poster={tokenData.thumbnailUrl}
-        className="w-full h-full rounded-xl"
-        autoPlay={true}
-        muted={false}
-      />
+      {isBrowserStream && isHost && tokenData.whipUrl ? (
+        <WHIPStreamPublisher
+          whipUrl={tokenData.whipUrl}
+          onStreamStart={() => toast({ title: "You are now live!" })}
+          onStreamEnd={() => toast({ title: "Stream ended" })}
+          onError={(err) => toast({ title: "Stream error", description: err.message, variant: "destructive" })}
+        />
+      ) : isBrowserStream && tokenData?.whepUrl ? (
+        <WHEPVideoPlayer
+          whepUrl={tokenData.whepUrl}
+          className="w-full h-full rounded-xl"
+          autoPlay={true}
+          muted={false}
+        />
+      ) : tokenData?.playbackUrl ? (
+        <HLSVideoPlayer
+          src={tokenData.playbackUrl}
+          poster={tokenData.thumbnailUrl}
+          className="w-full h-full rounded-xl"
+          autoPlay={true}
+          muted={false}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-black">
+          <p className="text-white/60">Stream not available</p>
+        </div>
+      )}
       
-      {isHost && tokenData.streamKey && (
-        <div className="absolute bottom-20 left-4 right-4 bg-black/90 rounded-lg p-4 backdrop-blur">
-          <h4 className="text-sm font-semibold text-white mb-2">Broadcast Settings (Host Only)</h4>
+      {isHost && isRtmpStream && tokenData?.streamKey && showBroadcastSettings && (
+        <div className="absolute bottom-20 left-4 right-4 bg-black/95 rounded-lg p-4 backdrop-blur border border-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Video className="h-4 w-4 text-primary" />
+              Broadcast Settings (Host Only)
+            </h4>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-6 text-xs text-white/60 hover:text-white"
+              onClick={() => setShowBroadcastSettings(false)}
+            >
+              Hide
+            </Button>
+          </div>
+          
+          <div className="grid gap-3 sm:grid-cols-2 mb-4">
+            <Button 
+              onClick={openOBS}
+              className="bg-[#302E2D] hover:bg-[#302E2D]/80 text-white gap-2"
+              data-testid="button-open-obs"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in OBS
+            </Button>
+            <Button 
+              onClick={openStreamlabs}
+              className="bg-[#31C3A2] hover:bg-[#31C3A2]/80 text-white gap-2"
+              data-testid="button-open-streamlabs"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in Streamlabs
+            </Button>
+          </div>
+
           <div className="space-y-2 text-xs">
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">RTMP URL:</span>
-              <code className="bg-white/10 px-2 py-1 rounded text-white flex-1 truncate">
+              <span className="text-white/60 min-w-[70px]">Server:</span>
+              <code className="bg-white/10 px-2 py-1.5 rounded text-white flex-1 truncate font-mono">
                 {tokenData.rtmpUrl}
               </code>
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-6 w-6"
-                onClick={() => copyToClipboard(tokenData.rtmpUrl || "")}
+                className="h-7 w-7 text-white/60 hover:text-white"
+                onClick={() => copyToClipboard(tokenData.rtmpUrl || "", "RTMP URL")}
+                data-testid="button-copy-rtmp"
               >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {copied === "RTMP URL" ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Stream Key:</span>
-              <code className="bg-white/10 px-2 py-1 rounded text-white flex-1 truncate">
-                {tokenData.streamKey.substring(0, 20)}...
+              <span className="text-white/60 min-w-[70px]">Stream Key:</span>
+              <code className="bg-white/10 px-2 py-1.5 rounded text-white flex-1 truncate font-mono">
+                {tokenData.streamKey.substring(0, 24)}...
               </code>
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-6 w-6"
-                onClick={() => copyToClipboard(tokenData.streamKey || "")}
+                className="h-7 w-7 text-white/60 hover:text-white"
+                onClick={() => copyToClipboard(tokenData.streamKey || "", "Stream Key")}
+                data-testid="button-copy-stream-key"
               >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {copied === "Stream Key" ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
             </div>
-            <p className="text-muted-foreground mt-2">
-              Use OBS, Streamlabs, or any RTMP broadcaster to go live!
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
+            <p className="text-white/50 text-xs">
+              Click a button above or copy settings manually
             </p>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-7 text-xs border-white/20 text-white hover:bg-white/10"
+              onClick={copyAllSettings}
+              data-testid="button-copy-all"
+            >
+              {copied === "all" ? <Check className="h-3 w-3 mr-1.5 text-green-400" /> : <Copy className="h-3 w-3 mr-1.5" />}
+              Copy All
+            </Button>
           </div>
         </div>
+      )}
+
+      {isHost && isRtmpStream && tokenData?.streamKey && !showBroadcastSettings && (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="absolute bottom-20 left-4 bg-black/80 hover:bg-black/90 text-white border border-white/10"
+          onClick={() => setShowBroadcastSettings(true)}
+          data-testid="button-show-broadcast-settings"
+        >
+          <Video className="h-4 w-4 mr-2" />
+          Show Broadcast Settings
+        </Button>
       )}
     </div>
   );
@@ -257,7 +385,7 @@ export default function LiveStreamViewer() {
   };
 
   const isHost = user?.id === stream?.hostId;
-  const hasMuxStream = !!stream?.muxPlaybackId;
+  const hasStreamProvider = !!stream?.muxPlaybackId || !!stream?.cloudflareInputId;
   
   if (isLoading) {
     return (
@@ -285,12 +413,12 @@ export default function LiveStreamViewer() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
-              {stream.status === "live" && hasMuxStream ? (
-                <MuxVideoPlayer 
+              {stream.status === "live" && hasStreamProvider ? (
+                <StreamPlayer 
                   streamId={streamId!} 
                   isHost={isHost}
                 />
-              ) : stream.status === "live" && !hasMuxStream ? (
+              ) : stream.status === "live" && !hasStreamProvider ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
                   <div className="p-4 rounded-full bg-primary/20 mb-4">
                     <Radio className="h-12 w-12 text-primary animate-pulse" />

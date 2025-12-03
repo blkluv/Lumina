@@ -1380,7 +1380,7 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   app.post("/api/streams", requireAuth, async (req, res) => {
     try {
-      const { title, description, thumbnailUrl } = req.body;
+      const { title, description, thumbnailUrl, streamingMethod } = req.body;
       
       if (!title?.trim()) {
         return res.status(400).json({ error: "Title is required" });
@@ -1393,9 +1393,40 @@ export async function registerRoutes(app: Express): Promise<void> {
         thumbnailUrl,
       });
 
-      // Create Mux live stream (preferred) or fall back to Daily.co
       const hasMuxCredentials = process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET;
+      const hasCloudflareCredentials = process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_STREAM_API_TOKEN;
       
+      // Browser-based streaming via Cloudflare WHIP
+      if (streamingMethod === "browser" && hasCloudflareCredentials) {
+        try {
+          console.log("Creating Cloudflare Stream input for browser streaming:", stream.id);
+          const cloudflareService = await import("./services/cloudflare-stream");
+          const cfInput = await cloudflareService.createCloudflareStreamInput(title.trim());
+          console.log("Cloudflare Stream input created:", cfInput.id);
+          
+          await storage.updateLiveStream(stream.id, {
+            cloudflareInputId: cfInput.id,
+            cloudflareWhipUrl: cfInput.whipUrl,
+            cloudflareWhepUrl: cfInput.whepUrl,
+            rtmpUrl: cfInput.rtmpUrl,
+            streamingProvider: "cloudflare",
+          });
+          
+          res.status(201).json({
+            ...stream,
+            cloudflareInputId: cfInput.id,
+            cloudflareWhipUrl: cfInput.whipUrl,
+            cloudflareWhepUrl: cfInput.whepUrl,
+            streamingProvider: "cloudflare",
+            streamingMethod: "browser",
+          });
+          return;
+        } catch (cfError: any) {
+          console.error("Failed to create Cloudflare Stream:", cfError?.message || cfError);
+        }
+      }
+      
+      // RTMP streaming via Mux (default for OBS/Streamlabs)
       if (hasMuxCredentials) {
         try {
           console.log("Creating Mux live stream for:", stream.id);
@@ -1403,7 +1434,6 @@ export async function registerRoutes(app: Express): Promise<void> {
           const muxStream = await muxService.createMuxLiveStream();
           console.log("Mux live stream created:", muxStream.id, muxStream.playbackId);
           
-          // Update stream with Mux info
           await storage.updateLiveStream(stream.id, {
             muxLiveStreamId: muxStream.id,
             muxPlaybackId: muxStream.playbackId,
@@ -1412,7 +1442,6 @@ export async function registerRoutes(app: Express): Promise<void> {
             streamingProvider: "mux",
           });
           
-          // Return stream with Mux info for host
           res.status(201).json({
             ...stream,
             muxLiveStreamId: muxStream.id,
@@ -1420,12 +1449,12 @@ export async function registerRoutes(app: Express): Promise<void> {
             muxStreamKey: muxStream.streamKey,
             rtmpUrl: muxStream.rtmpUrl,
             streamingProvider: "mux",
+            streamingMethod: "rtmp",
             playbackUrl: `https://stream.mux.com/${muxStream.playbackId}.m3u8`,
           });
           return;
         } catch (muxError: any) {
           console.error("Failed to create Mux stream:", muxError?.message || muxError);
-          // Return stream without video - chat and tips still work
           res.status(201).json(stream);
           return;
         }
@@ -1437,7 +1466,25 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Get stream playback info (Mux HLS)
+  // Check which streaming providers are available
+  app.get("/api/streams/providers", requireAuth, async (req, res) => {
+    const hasMux = !!(process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET);
+    const hasCloudflare = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_STREAM_API_TOKEN);
+    
+    res.json({
+      providers: {
+        mux: hasMux,
+        cloudflare: hasCloudflare,
+      },
+      methods: {
+        rtmp: hasMux,
+        browser: hasCloudflare,
+      },
+      default: hasCloudflare ? "browser" : (hasMux ? "rtmp" : null),
+    });
+  });
+
+  // Get stream playback info (Mux HLS or Cloudflare WHEP)
   app.get("/api/streams/:id/token", requireAuth, async (req, res) => {
     try {
       const stream = await storage.getLiveStream(req.params.id);
@@ -1452,19 +1499,37 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       const isOwner = stream.hostId === req.session.userId;
       
-      // Check if Mux stream is configured
+      // Handle Cloudflare Stream (browser-based WHIP)
+      if (stream.cloudflareInputId && stream.cloudflareWhepUrl) {
+        if (isOwner) {
+          return res.json({
+            provider: "cloudflare",
+            streamingMethod: "browser",
+            whipUrl: stream.cloudflareWhipUrl,
+            whepUrl: stream.cloudflareWhepUrl,
+            isOwner: true,
+          });
+        }
+        return res.json({
+          provider: "cloudflare",
+          streamingMethod: "browser",
+          whepUrl: stream.cloudflareWhepUrl,
+          isOwner: false,
+        });
+      }
+      
+      // Handle Mux stream (RTMP)
       if (!stream.muxPlaybackId) {
         return res.status(400).json({ error: "Stream is not configured for video playback" });
       }
       
-      // Return HLS playback URL
       const playbackUrl = `https://stream.mux.com/${stream.muxPlaybackId}.m3u8`;
       const thumbnailUrl = `https://image.mux.com/${stream.muxPlaybackId}/thumbnail.jpg`;
       
-      // If owner, also return stream key for broadcasting
       if (isOwner) {
         return res.json({
           provider: "mux",
+          streamingMethod: "rtmp",
           playbackUrl,
           thumbnailUrl,
           rtmpUrl: stream.rtmpUrl || "rtmps://global-live.mux.com:443/app",
@@ -1475,6 +1540,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       
       return res.json({
         provider: "mux",
+        streamingMethod: "rtmp",
         playbackUrl,
         thumbnailUrl,
         isOwner: false,
@@ -1505,6 +1571,17 @@ export async function registerRoutes(app: Express): Promise<void> {
           console.error("Failed to disable Mux stream:", muxError);
         }
       }
+      
+      // Delete Cloudflare Stream input
+      if (stream.cloudflareInputId) {
+        try {
+          const cloudflareService = await import("./services/cloudflare-stream");
+          await cloudflareService.deleteCloudflareStreamInput(stream.cloudflareInputId);
+          console.log("Cloudflare Stream input deleted:", stream.cloudflareInputId);
+        } catch (cfError) {
+          console.error("Failed to delete Cloudflare Stream:", cfError);
+        }
+      }
 
       await storage.endLiveStream(req.params.id);
       res.json({ success: true });
@@ -1513,12 +1590,29 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Get Mux stream status (for checking if broadcaster is connected)
+  // Get stream status (for checking if broadcaster is connected)
   app.get("/api/streams/:id/status", async (req, res) => {
     try {
       const stream = await storage.getLiveStream(req.params.id);
       if (!stream) {
         return res.status(404).json({ error: "Stream not found" });
+      }
+
+      // For Cloudflare streams, check input status
+      if (stream.cloudflareInputId) {
+        try {
+          const cloudflareService = await import("./services/cloudflare-stream");
+          const status = await cloudflareService.getCloudflareStreamStatus(stream.cloudflareInputId);
+          return res.json({
+            provider: "cloudflare",
+            streamingMethod: "browser",
+            streamStatus: stream.status,
+            broadcastStatus: status.state,
+            isLive: status.state === "connected",
+          });
+        } catch (cfError) {
+          console.error("Failed to get Cloudflare status:", cfError);
+        }
       }
 
       // For Mux streams, check actual broadcast status
@@ -1528,6 +1622,7 @@ export async function registerRoutes(app: Express): Promise<void> {
           const status = await muxService.getMuxStreamStatus(stream.muxLiveStreamId);
           return res.json({
             provider: "mux",
+            streamingMethod: "rtmp",
             streamStatus: stream.status,
             broadcastStatus: status.status,
             isLive: status.status === "active",
@@ -1538,7 +1633,7 @@ export async function registerRoutes(app: Express): Promise<void> {
         }
       }
 
-      // Fallback for streams without Mux
+      // Fallback for streams without provider
       res.json({
         provider: "none",
         streamStatus: stream.status,
