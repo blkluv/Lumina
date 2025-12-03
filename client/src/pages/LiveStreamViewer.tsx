@@ -95,7 +95,7 @@ function DailyVideoPlayer({
   const [hasJoined, setHasJoined] = useState(false);
 
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamToken>({
-    queryKey: ["/api/streams", streamId, "token"],
+    queryKey: [`/api/streams/${streamId}/token`],
     enabled: !!streamId,
     retry: false,
   });
@@ -286,13 +286,13 @@ export default function LiveStreamViewer() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { data: stream, isLoading, refetch: refetchStream } = useQuery<LiveStream>({
-    queryKey: ["/api/streams", streamId],
+    queryKey: [`/api/streams/${streamId}`],
     enabled: !!streamId,
     refetchInterval: 5000,
   });
   
   const { data: messages = [], refetch: refetchMessages } = useQuery<StreamMessage[]>({
-    queryKey: ["/api/streams", streamId, "messages"],
+    queryKey: [`/api/streams/${streamId}/messages`],
     enabled: !!streamId && stream?.status === "live",
     refetchInterval: 2000,
   });
@@ -321,7 +321,7 @@ export default function LiveStreamViewer() {
       setTipOpen(false);
       setTipAmount("5");
       setTipMessage("");
-      queryClient.invalidateQueries({ queryKey: ["/api/streams", streamId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/streams/${streamId}`] });
       refetchMessages();
     },
     onError: () => {
