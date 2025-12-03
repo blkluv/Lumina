@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
-import { useRoute } from "wouter";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import DailyIframe, { DailyCall } from "@daily-co/daily-js";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,21 +17,18 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Radio, 
-  Users, 
   Eye, 
   Coins, 
   Send, 
   Loader2,
-  Heart,
   Gift,
-  X,
   MessageCircle,
-  Copy,
-  Check,
-  Settings,
   Video,
+  VideoOff,
   Mic,
-  Camera,
+  MicOff,
+  PhoneOff,
+  AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -42,6 +40,8 @@ interface LiveStream {
   title: string;
   description: string | null;
   thumbnailUrl: string | null;
+  dailyRoomName: string | null;
+  dailyRoomUrl: string | null;
   status: string;
   viewerCount: number;
   totalTips: string;
@@ -61,6 +61,12 @@ interface StreamMessage {
   sender?: User;
 }
 
+interface StreamToken {
+  token: string;
+  roomUrl: string;
+  isOwner: boolean;
+}
+
 const TIP_AMOUNTS = [
   { amount: "1", label: "1 AXM" },
   { amount: "5", label: "5 AXM" },
@@ -70,8 +76,204 @@ const TIP_AMOUNTS = [
   { amount: "100", label: "100 AXM" },
 ];
 
+function DailyVideoPlayer({ 
+  streamId, 
+  isHost, 
+  onLeave 
+}: { 
+  streamId: string; 
+  isHost: boolean; 
+  onLeave: () => void;
+}) {
+  const { toast } = useToast();
+  const callRef = useRef<DailyCall | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isJoining, setIsJoining] = useState(true);
+  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [isAudioOn, setIsAudioOn] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hasJoined, setHasJoined] = useState(false);
+
+  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useQuery<StreamToken>({
+    queryKey: ["/api/streams", streamId, "token"],
+    enabled: !!streamId,
+    retry: false,
+  });
+
+  const joinCall = useCallback(async () => {
+    if (!tokenData || !containerRef.current || hasJoined) return;
+
+    try {
+      setIsJoining(true);
+      setError(null);
+
+      // Create call instance
+      const call = DailyIframe.createCallObject({
+        showLeaveButton: false,
+        showFullscreenButton: false,
+        iframeStyle: {
+          width: "100%",
+          height: "100%",
+          border: "0",
+          borderRadius: "12px",
+        },
+      });
+
+      callRef.current = call;
+
+      // Set up event listeners
+      call.on("joined-meeting", () => {
+        setIsJoining(false);
+        setHasJoined(true);
+      });
+
+      call.on("left-meeting", () => {
+        setHasJoined(false);
+        onLeave();
+      });
+
+      call.on("error", (event) => {
+        console.error("Daily.co error:", event);
+        setError("Video connection error. Please try again.");
+        setIsJoining(false);
+      });
+
+      call.on("camera-error", () => {
+        toast({
+          title: "Camera Error",
+          description: "Could not access your camera. Please check permissions.",
+          variant: "destructive",
+        });
+      });
+
+      // Join the call
+      await call.join({
+        url: tokenData.roomUrl,
+        token: tokenData.token,
+        startVideoOff: !isHost,
+        startAudioOff: !isHost,
+      });
+
+      // Attach to container
+      if (containerRef.current) {
+        const iframe = call.iframe();
+        if (iframe) {
+          containerRef.current.innerHTML = "";
+          containerRef.current.appendChild(iframe);
+        }
+      }
+
+    } catch (err) {
+      console.error("Failed to join call:", err);
+      setError("Failed to connect to stream. Please try again.");
+      setIsJoining(false);
+    }
+  }, [tokenData, isHost, hasJoined, onLeave, toast]);
+
+  useEffect(() => {
+    if (tokenData && !hasJoined) {
+      joinCall();
+    }
+
+    return () => {
+      if (callRef.current) {
+        callRef.current.leave();
+        callRef.current.destroy();
+      }
+    };
+  }, [tokenData, joinCall, hasJoined]);
+
+  const toggleVideo = async () => {
+    if (callRef.current) {
+      await callRef.current.setLocalVideo(!isVideoOn);
+      setIsVideoOn(!isVideoOn);
+    }
+  };
+
+  const toggleAudio = async () => {
+    if (callRef.current) {
+      await callRef.current.setLocalAudio(!isAudioOn);
+      setIsAudioOn(!isAudioOn);
+    }
+  };
+
+  const leaveCall = async () => {
+    if (callRef.current) {
+      await callRef.current.leave();
+    }
+    onLeave();
+  };
+
+  if (tokenLoading) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (tokenError || error) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
+        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <p className="text-white text-center mb-4">
+          {error || "Failed to load stream. Please try again."}
+        </p>
+        <Button onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full">
+      <div ref={containerRef} className="w-full h-full bg-black rounded-xl" />
+      
+      {isJoining && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-white">Connecting to stream...</p>
+          </div>
+        </div>
+      )}
+
+      {isHost && hasJoined && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-black/70 rounded-full backdrop-blur-sm">
+          <Button
+            variant={isVideoOn ? "secondary" : "destructive"}
+            size="icon"
+            onClick={toggleVideo}
+            data-testid="button-toggle-video"
+          >
+            {isVideoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant={isAudioOn ? "secondary" : "destructive"}
+            size="icon"
+            onClick={toggleAudio}
+            data-testid="button-toggle-audio"
+          >
+            {isAudioOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="destructive"
+            size="icon"
+            onClick={leaveCall}
+            data-testid="button-leave-call"
+          >
+            <PhoneOff className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LiveStreamViewer() {
   const [, params] = useRoute("/live/:id");
+  const [, navigate] = useLocation();
   const streamId = params?.id;
   const { user } = useAuth();
   const { isConnected, axmBalance } = useWallet();
@@ -81,10 +283,9 @@ export default function LiveStreamViewer() {
   const [tipOpen, setTipOpen] = useState(false);
   const [tipAmount, setTipAmount] = useState("5");
   const [tipMessage, setTipMessage] = useState("");
-  const [copied, setCopied] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  const { data: stream, isLoading } = useQuery<LiveStream>({
+  const { data: stream, isLoading, refetch: refetchStream } = useQuery<LiveStream>({
     queryKey: ["/api/streams", streamId],
     enabled: !!streamId,
     refetchInterval: 5000,
@@ -136,6 +337,7 @@ export default function LiveStreamViewer() {
     onSuccess: () => {
       toast({ title: "Stream ended" });
       queryClient.invalidateQueries({ queryKey: ["/api/streams"] });
+      navigate("/live");
     },
   });
   
@@ -148,8 +350,13 @@ export default function LiveStreamViewer() {
     if (!message.trim()) return;
     sendMessageMutation.mutate(message.trim());
   };
+
+  const handleLeaveStream = () => {
+    refetchStream();
+  };
   
   const isHost = user?.id === stream?.hostId;
+  const hasVideoRoom = !!stream?.dailyRoomName;
   
   if (isLoading) {
     return (
@@ -177,30 +384,38 @@ export default function LiveStreamViewer() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
-              {isHost && stream.status === "live" ? (
+              {stream.status === "live" && hasVideoRoom && user ? (
+                <DailyVideoPlayer 
+                  streamId={streamId!} 
+                  isHost={isHost}
+                  onLeave={handleLeaveStream}
+                />
+              ) : stream.status === "live" && !hasVideoRoom ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
                   <div className="p-4 rounded-full bg-primary/20 mb-4">
                     <Radio className="h-12 w-12 text-primary animate-pulse" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">You're Live!</h3>
-                  <p className="text-white/70 text-center max-w-md mb-6">
-                    Your stream is active and viewers can join. Chat with your audience and receive tips!
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    {isHost ? "You're Live!" : "Live Stream"}
+                  </h3>
+                  <p className="text-white/70 text-center max-w-md">
+                    {isHost 
+                      ? "Video room not available. Chat and tips are still active!"
+                      : "Video is not available for this stream. Enjoy the chat!"}
                   </p>
-                  
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-black/40 rounded-lg">
-                      <Camera className="h-4 w-4 text-primary" />
-                      <span className="text-white text-sm">Camera Ready</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-black/40 rounded-lg">
-                      <Mic className="h-4 w-4 text-primary" />
-                      <span className="text-white text-sm">Mic Active</span>
-                    </div>
+                </div>
+              ) : stream.status === "live" && !user ? (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-primary/20 to-emerald-500/20 p-6">
+                  <div className="p-4 rounded-full bg-primary/20 mb-4">
+                    <Radio className="h-12 w-12 text-primary animate-pulse" />
                   </div>
-                  
-                  <p className="text-white/50 text-xs text-center">
-                    Video streaming requires WebRTC integration (coming soon)
+                  <h3 className="text-xl font-bold text-white mb-2">Live Now</h3>
+                  <p className="text-white/70 text-center max-w-md mb-4">
+                    Sign in to watch this stream and interact with chat
                   </p>
+                  <Button onClick={() => navigate("/auth")}>
+                    Sign In to Watch
+                  </Button>
                 </div>
               ) : stream.thumbnailUrl ? (
                 <img
@@ -210,7 +425,7 @@ export default function LiveStreamViewer() {
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-emerald-500/30">
-                  <Radio className="h-20 w-20 text-primary animate-pulse" />
+                  <Radio className="h-20 w-20 text-primary" />
                 </div>
               )}
               
@@ -235,7 +450,7 @@ export default function LiveStreamViewer() {
                 </div>
               )}
               
-              <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+              <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-none">
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary" className="bg-black/70 text-white border-0">
                     <Eye className="h-3 w-3 mr-1" />
@@ -247,6 +462,7 @@ export default function LiveStreamViewer() {
                   <Button
                     variant="destructive"
                     size="sm"
+                    className="pointer-events-auto"
                     onClick={() => endStreamMutation.mutate()}
                     disabled={endStreamMutation.isPending}
                     data-testid="button-end-stream"
@@ -281,7 +497,7 @@ export default function LiveStreamViewer() {
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     {parseFloat(stream.totalTips) > 0 && (
                       <div className="flex items-center gap-1.5 text-primary">
                         <Coins className="h-5 w-5" />
