@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import type { User } from "@shared/schema";
-import { apiRequest, queryClient } from "./queryClient";
+import { apiRequest, queryClient, refreshCsrfToken, resetCsrfToken } from "./queryClient";
 
 interface AuthContextType {
   user: User | null;
@@ -39,6 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await response.json();
     setUser(data.user);
     setIsLoading(false);
+    // Refresh CSRF token for new session
+    await refreshCsrfToken();
     await queryClient.invalidateQueries();
   }
 
@@ -47,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await response.json();
     setUser(data.user);
     setIsLoading(false);
+    // Refresh CSRF token for new session
+    await refreshCsrfToken();
     await queryClient.invalidateQueries();
     return data.user;
   }
@@ -54,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     await apiRequest("POST", "/api/auth/logout", {});
     setUser(null);
+    // Reset CSRF token on logout
+    resetCsrfToken();
     queryClient.clear();
   }
 

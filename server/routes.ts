@@ -1,12 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import sanitizeHtml from "sanitize-html";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { notificationHub, generateWsToken } from "./websocket";
 import { sendBulkEmail, emailTemplates, sendEmail } from "./services/email";
 import { sendSMS, smsTemplates } from "./services/sms";
-import { createCheckoutSession, isStripeConfigured, getPublishableKey } from "./services/payments";
+import { createCheckoutSession, isStripeConfigured, getPublishableKey, verifyStripeWebhookSignature, isWebhookSecretConfigured, type StripeWebhookEvent } from "./services/payments";
 import { contentModerationService, type ModerationResult } from "./services/contentModeration";
 
 // Rate limiters for different endpoint categories
@@ -45,6 +46,86 @@ const sanitizeOptions: sanitizeHtml.IOptions = {
 function sanitizeText(text: string | undefined | null): string {
   if (!text) return "";
   return sanitizeHtml(text, sanitizeOptions).trim();
+}
+
+// CSRF Protection using Double Submit Cookie pattern
+// The token is stored in both a cookie (readable by JS) and validated against the header
+// This prevents CSRF because attackers can't read cookies from another domain
+
+// Generate a new CSRF token
+function generateCsrfToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+// Set CSRF cookie with appropriate security settings
+function setCsrfCookie(res: Response, token: string): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.cookie('csrf-token', token, {
+    httpOnly: false, // Must be false so JavaScript can read it
+    secure: isProduction,
+    sameSite: 'strict',
+    maxAge: 30 * 60 * 1000, // 30 minutes
+    path: '/',
+  });
+}
+
+// Validate CSRF token - both cookie and header must match
+function validateCsrfToken(cookieToken: string | undefined, headerToken: string | undefined): boolean {
+  if (!cookieToken || !headerToken) return false;
+  if (cookieToken.length !== headerToken.length) return false;
+  
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(cookieToken, 'utf8'),
+      Buffer.from(headerToken, 'utf8')
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Parse cookies from request
+function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  
+  cookieHeader.split(';').forEach(cookie => {
+    const [name, ...rest] = cookie.trim().split('=');
+    if (name) {
+      cookies[name] = rest.join('=');
+    }
+  });
+  
+  return cookies;
+}
+
+// CSRF protection middleware for state-changing requests
+function csrfProtection(req: Request, res: Response, next: NextFunction) {
+  // Skip CSRF for safe methods
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  
+  // Skip CSRF for unauthenticated requests (auth endpoints handle their own security)
+  if (!req.session?.userId) {
+    return next();
+  }
+  
+  // Skip CSRF for webhook endpoints that have their own signature verification
+  if (req.path.startsWith('/api/webhooks/')) {
+    return next();
+  }
+  
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieToken = cookies['csrf-token'];
+  const headerToken = req.headers['x-csrf-token'] as string | undefined;
+  
+  if (!validateCsrfToken(cookieToken, headerToken)) {
+    return res.status(403).json({ error: "Invalid CSRF token" });
+  }
+  
+  next();
 }
 import {
   insertUserSchema,
@@ -102,6 +183,16 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export async function registerRoutes(app: Express): Promise<void> {
+  // Apply CSRF protection globally for state-changing requests
+  app.use(csrfProtection);
+  
+  // CSRF token endpoint - provides a fresh token for authenticated users
+  app.get("/api/csrf-token", requireAuth, (req, res) => {
+    const token = generateCsrfToken();
+    setCsrfCookie(res, token);
+    res.json({ csrfToken: token });
+  });
+  
   // Apply rate limiting to auth routes
   app.post("/api/auth/signup", authLimiter, async (req, res) => {
     try {
@@ -4339,6 +4430,124 @@ export async function registerRoutes(app: Express): Promise<void> {
       twilio: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
       googleAnalytics: !!process.env.VITE_GA_MEASUREMENT_ID,
     });
+  });
+
+  // ============= STRIPE WEBHOOK ROUTES =============
+  
+  // Stripe webhook endpoint with signature verification
+  // Note: This endpoint uses raw body parsing and is excluded from CSRF protection
+  app.post("/api/webhooks/stripe", async (req: Request, res: Response) => {
+    try {
+      // Check if webhook secret is configured
+      if (!isWebhookSecretConfigured()) {
+        console.warn("Stripe webhook received but STRIPE_WEBHOOK_SECRET not configured");
+        return res.status(500).json({ error: "Webhook not configured" });
+      }
+      
+      // Get the raw body for signature verification
+      const rawBody = req.rawBody as Buffer | undefined;
+      if (!rawBody) {
+        return res.status(400).json({ error: "Missing request body" });
+      }
+      
+      // Verify the webhook signature
+      const signatureHeader = req.headers["stripe-signature"] as string | undefined;
+      const result = verifyStripeWebhookSignature(rawBody, signatureHeader);
+      
+      if (!result.valid || !result.event) {
+        console.error("Stripe webhook signature verification failed:", result.error);
+        return res.status(400).json({ error: result.error || "Invalid signature" });
+      }
+      
+      const event = result.event;
+      console.log(`Processing Stripe webhook: ${event.type}`);
+      
+      // Handle different event types
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as Record<string, unknown>;
+          const metadata = session.metadata as Record<string, string> | undefined;
+          
+          if (metadata?.type === "tip") {
+            // Handle tip completion
+            const fromUserId = metadata.fromUserId;
+            const toUserId = metadata.toUserId;
+            const amount = (session.amount_total as number) || 0;
+            
+            if (fromUserId && toUserId) {
+              console.log(`Tip completed: ${fromUserId} -> ${toUserId}, amount: ${amount}`);
+              // Create reward event for tip receiver
+              await storage.createRewardEvent({
+                userId: toUserId,
+                eventType: "received_tip",
+                points: Math.floor(amount / 10), // 1 point per 10 cents
+                metadata: { fromUserId, amount },
+              });
+              
+              // Create notification for tip receiver
+              const sender = await storage.getUser(fromUserId);
+              if (sender) {
+                await storage.createNotification({
+                  userId: toUserId,
+                  type: "tip",
+                  title: "You received a tip!",
+                  message: `${sender.displayName || sender.username} sent you a $${(amount / 100).toFixed(2)} tip!`,
+                  data: { fromUserId, amount },
+                });
+              }
+            }
+          } else if (metadata?.type === "donation") {
+            // Handle donation completion
+            const campaignId = metadata.campaignId;
+            const userId = metadata.userId;
+            const amount = (session.amount_total as number) || 0;
+            
+            if (campaignId) {
+              console.log(`Donation completed for campaign: ${campaignId}, amount: ${amount}`);
+              // Update campaign with donation amount (if applicable)
+            }
+          } else if (metadata?.type === "subscription") {
+            // Handle subscription activation
+            const userId = metadata.userId;
+            console.log(`Subscription activated for user: ${userId}`);
+          }
+          break;
+        }
+        
+        case "customer.subscription.updated":
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Record<string, unknown>;
+          const status = subscription.status as string;
+          const metadata = subscription.metadata as Record<string, string> | undefined;
+          
+          if (metadata?.userId) {
+            console.log(`Subscription ${event.type}: user ${metadata.userId}, status: ${status}`);
+            // Update user's subscription status in database
+          }
+          break;
+        }
+        
+        case "payment_intent.payment_failed": {
+          const paymentIntent = event.data.object as Record<string, unknown>;
+          const metadata = paymentIntent.metadata as Record<string, string> | undefined;
+          
+          if (metadata?.userId) {
+            console.log(`Payment failed for user: ${metadata.userId}`);
+            // Optionally notify user of failed payment
+          }
+          break;
+        }
+        
+        default:
+          console.log(`Unhandled Stripe event type: ${event.type}`);
+      }
+      
+      // Always respond 200 to acknowledge receipt
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Stripe webhook error:", error);
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
   });
 
   // ============= PHASE 4: USER ONBOARDING ROUTES =============
