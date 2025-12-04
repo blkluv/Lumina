@@ -43,6 +43,7 @@ export default function CourseDetail() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCourseActive, setIsCourseActive] = useState(false);
 
   useEffect(() => {
     const courseData = getCourseById(courseId);
@@ -50,6 +51,18 @@ export default function CourseDetail() {
     setCourse(courseData || null);
     setCategory(categoryData);
     setIsLoading(false);
+  }, [courseId]);
+
+  useEffect(() => {
+    const checkCourseStatus = async () => {
+      try {
+        const onChainCourse = await academy.getCourse(courseId);
+        setIsCourseActive(onChainCourse !== null && onChainCourse.status === 1);
+      } catch (error) {
+        setIsCourseActive(false);
+      }
+    };
+    checkCourseStatus();
   }, [courseId]);
 
   useEffect(() => {
@@ -215,7 +228,7 @@ export default function CourseDetail() {
                   Continue Learning
                 </Button>
               </div>
-            ) : (
+            ) : isCourseActive ? (
               <Button 
                 size="lg"
                 onClick={handleEnroll}
@@ -234,6 +247,14 @@ export default function CourseDetail() {
                   </>
                 )}
               </Button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Button size="lg" variant="secondary" disabled data-testid="button-coming-soon">
+                  <Clock className="h-5 w-5 mr-2" />
+                  Coming Soon
+                </Button>
+                <span className="text-sm text-muted-foreground">On-chain enrollment opening soon</span>
+              </div>
             )}
             <div className="flex items-center gap-2 text-sm">
               <Trophy className="h-5 w-5 text-amber-500" />
@@ -241,7 +262,7 @@ export default function CourseDetail() {
             </div>
           </div>
 
-          {!isConnected && (
+          {!isConnected && isCourseActive && (
             <div className="mt-4 p-3 rounded-lg bg-background/50 flex items-center gap-3 text-sm">
               <Wallet className="h-5 w-5 text-muted-foreground" />
               <span className="text-muted-foreground">Connect your wallet to enroll and track progress</span>

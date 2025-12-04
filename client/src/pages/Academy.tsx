@@ -132,6 +132,7 @@ export default function Academy() {
   const [isLoading, setIsLoading] = useState(true);
   const [enrollingCourse, setEnrollingCourse] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [activeCourseIds, setActiveCourseIds] = useState<Set<number>>(new Set());
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -180,7 +181,9 @@ export default function Academy() {
         coursePromises.push(academy.getCourse(i));
       }
       const courseResults = await Promise.all(coursePromises);
-      setCourses(courseResults.filter((c): c is CourseInfo => c !== null && c.status === 1));
+      const activeCourses = courseResults.filter((c): c is CourseInfo => c !== null && c.status === 1);
+      setCourses(activeCourses);
+      setActiveCourseIds(new Set(activeCourses.map(c => c.courseId)));
 
     } catch (error) {
       console.error('Failed to fetch academy data:', error);
@@ -521,7 +524,7 @@ export default function Academy() {
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Enrolled
                           </Button>
-                        ) : (
+                        ) : activeCourseIds.has(course.id) ? (
                           <Button 
                             size="sm"
                             className="w-full" 
@@ -540,6 +543,11 @@ export default function Academy() {
                                 Start Course
                               </>
                             )}
+                          </Button>
+                        ) : (
+                          <Button variant="secondary" size="sm" className="w-full" disabled>
+                            <Clock className="h-4 w-4 mr-2" />
+                            Coming Soon
                           </Button>
                         )}
                       </CardFooter>
@@ -612,7 +620,7 @@ export default function Academy() {
                                   <CheckCircle className="h-4 w-4 mr-2" />
                                   Enrolled
                                 </Button>
-                              ) : (
+                              ) : activeCourseIds.has(course.id) ? (
                                 <Button 
                                   size="sm"
                                   onClick={() => handleEnroll(course.id)}
@@ -627,6 +635,11 @@ export default function Academy() {
                                       Start
                                     </>
                                   )}
+                                </Button>
+                              ) : (
+                                <Button variant="secondary" size="sm" disabled>
+                                  <Clock className="h-4 w-4 mr-1" />
+                                  Soon
                                 </Button>
                               )}
                             </div>
