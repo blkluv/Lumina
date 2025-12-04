@@ -130,8 +130,16 @@ Key functions:
   - Enhanced transaction tracker UI with claim/redeem buttons
   - Key files: `client/src/lib/arbitrumBridge.ts`, `client/src/lib/useArbitrumBridge.ts`, `client/src/pages/Bridge.tsx`
 
+- **The Forge Rebrand** (December 2025): Complete rebrand of Academy feature to "The Forge" learning platform:
+  - New visual identity with flame icon, orange/amber gradient theme, and forge/transformation messaging
+  - Four course tracks: Creator Foundations (pink), Web3 Mastery (blue), Monetization & Growth (amber), Community & Advocacy (emerald)
+  - 16 structured courses with lessons, durations, difficulty levels, and badge rewards
+  - Gamification UI: XP progress bars, level system, platform unlock incentives
+  - Navigation updated across sidebar, mobile menu, and header dropdown
+  - Integration with AxiomAcademyHub contract for on-chain enrollments and NFT certifications
+
 - **AXIOM Protocol Contract Expansion** (December 2025): Expanded smart contract integration from 6 to 9 contracts, adding:
-  - **AxiomAcademyHub** (`/academy`): Educational platform with on-chain courses, enrollment tracking, lesson completion, and NFT certifications
+  - **AxiomAcademyHub** (`/academy`): "The Forge" educational platform with on-chain courses, enrollment tracking, lesson completion, and NFT certifications
   - **AxiomExchangeHub** (`/exchange`): Decentralized exchange with token swap interface, liquidity pool management, 0.3% swap fee, and slippage settings
   - **DePINNodeSales** (`/nodes`): DePIN node marketplace with tiered node selection, ETH/AXM payment options, 15% AXM discount, and purchase history
   - New React hooks: `useAcademyContract()`, `useExchangeContract()`, `useDePINContract()`
