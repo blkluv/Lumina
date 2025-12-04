@@ -6643,7 +6643,7 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   app.post("/api/marketplace/orders", requireAuth, async (req, res) => {
     try {
-      const { shopId, items, shippingAddress, affiliateLinkCode } = req.body;
+      const { shopId, items, shippingAddress, affiliateLinkCode, txHash, platformFeeTxHash, shippingName, shippingEmail, notes } = req.body;
       
       if (!items || items.length === 0) {
         return res.status(400).json({ error: "Cart is empty" });
@@ -6688,6 +6688,17 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       const sellerReceives = subtotal - platformFee - affiliateFee;
 
+      const shippingInfo = shippingAddress ? { 
+        address: shippingAddress, 
+        name: shippingName, 
+        email: shippingEmail 
+      } : (shippingName || shippingEmail) ? { 
+        name: shippingName, 
+        email: shippingEmail 
+      } : null;
+
+      // Orders start as 'pending' until payment is verified on-chain
+      // A background job or webhook should verify the txHash and update status to 'confirmed'
       const order = await storage.createShopOrder({
         shopId,
         buyerId: req.session.userId!,
@@ -6697,8 +6708,11 @@ export async function registerRoutes(app: Express): Promise<void> {
         totalAxm: subtotal.toString(),
         sellerReceivesAxm: sellerReceives.toString(),
         affiliateLinkId,
-        shippingAddress,
-        status: 'pending',
+        shippingAddress: shippingInfo,
+        buyerNotes: notes,
+        paymentTxHash: txHash,
+        platformFeeTxHash: platformFeeTxHash || null,
+        status: 'pending', // Always start as pending, verify tx separately
       }, orderItems);
 
       res.status(201).json(order);

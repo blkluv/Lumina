@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/authContext";
 import { useWallet } from "@/lib/walletContext";
+import { useCart } from "@/lib/cartContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AXM_TOKEN_ADDRESS, parseAxmAmount } from "@/lib/web3Config";
@@ -75,6 +76,7 @@ export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { address, isConnected, connect, isCorrectNetwork, switchNetwork, axmBalance } = useWallet();
+  const { addToCart } = useCart();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   
@@ -161,7 +163,9 @@ export default function ProductDetail() {
     }
   };
 
-  const addToCart = () => {
+  const handleAddToCart = () => {
+    if (!product) return;
+    addToCart(product as any, quantity);
     toast({ title: `Added ${quantity} item(s) to cart` });
   };
 
@@ -398,7 +402,7 @@ export default function ProductDetail() {
                   variant="outline"
                   size="lg"
                   className="gap-2"
-                  onClick={addToCart}
+                  onClick={handleAddToCart}
                   data-testid="button-add-to-cart"
                 >
                   <ShoppingCart className="h-5 w-5" />

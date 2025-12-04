@@ -3218,6 +3218,7 @@ export const shopOrders = pgTable("shop_orders", {
   affiliateFeeAxm: text("affiliate_fee_axm").default("0"),
   sellerReceivesAxm: text("seller_receives_axm").notNull(),
   paymentTxHash: text("payment_tx_hash"),
+  platformFeeTxHash: text("platform_fee_tx_hash"),
   paymentConfirmedAt: timestamp("payment_confirmed_at"),
   affiliateLinkId: integer("affiliate_link_id"),
   shippingAddress: jsonb("shipping_address"),

@@ -50,6 +50,8 @@ import Nodes from "@/pages/Nodes";
 import Marketplace from "@/pages/Marketplace";
 import ShopDetail from "@/pages/ShopDetail";
 import ProductDetail from "@/pages/ProductDetail";
+import Checkout from "@/pages/Checkout";
+import { CartProvider } from "@/lib/cartContext";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -115,6 +117,7 @@ function Router() {
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/marketplace/shop/:slug" component={ShopDetail} />
       <Route path="/marketplace/product/:id" component={ProductDetail} />
+      <Route path="/marketplace/checkout" component={() => <ProtectedRoute component={Checkout} />} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} />} />
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
@@ -139,10 +142,12 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <WalletProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Router />
-            </TooltipProvider>
+            <CartProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Router />
+              </TooltipProvider>
+            </CartProvider>
           </WalletProvider>
         </AuthProvider>
       </ThemeProvider>

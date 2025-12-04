@@ -14,6 +14,13 @@ export const AXM_TOKEN_ADDRESS = CONTRACT_ADDRESSES.AXM_TOKEN;
 
 export const AXM_TOKEN_ABI = FULL_AXM_ABI;
 
+// Platform treasury wallet for collecting marketplace fees
+export const PLATFORM_TREASURY_WALLET = "0x7F455b4614E05820AAD52067Ef223f30b1936f93"; // GamificationHub used as treasury
+
+// Marketplace fee configuration - must match backend
+export const MARKETPLACE_PLATFORM_FEE_BPS = 200; // 2% (200 basis points)
+export const MARKETPLACE_AFFILIATE_FEE_BPS = 500; // 5% when affiliate link used
+
 export function formatAxmBalance(balance: string | bigint): string {
   const value = typeof balance === "string" ? BigInt(balance) : balance;
   const decimals = 18;

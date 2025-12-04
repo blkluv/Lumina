@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/authContext";
 import { useWallet } from "@/lib/walletContext";
+import { useCart } from "@/lib/cartContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -136,6 +137,7 @@ export default function Marketplace() {
   const { user } = useAuth();
   const { address, isConnected, connect } = useWallet();
   const { toast } = useToast();
+  const { cartItems, addToCart, removeFromCart, getCartTotal, getItemCount } = useCart();
   const [, navigate] = useLocation();
   
   const [activeTab, setActiveTab] = useState("browse");
@@ -143,7 +145,6 @@ export default function Marketplace() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [showCreateShop, setShowCreateShop] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ShopProduct | null>(null);
-  const [cartItems, setCartItems] = useState<{ product: ShopProduct; quantity: number }[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [newShopData, setNewShopData] = useState({
     name: "",
@@ -211,28 +212,9 @@ export default function Marketplace() {
     },
   });
 
-  const addToCart = (product: ShopProduct) => {
-    const existing = cartItems.find(item => item.product.id === product.id);
-    if (existing) {
-      setCartItems(cartItems.map(item => 
-        item.product.id === product.id 
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setCartItems([...cartItems, { product, quantity: 1 }]);
-    }
+  const handleAddToCart = (product: ShopProduct) => {
+    addToCart(product as any);
     toast({ title: "Added to cart" });
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCartItems(cartItems.filter(item => item.product.id !== productId));
-  };
-
-  const getCartTotal = () => {
-    return cartItems.reduce((total, item) => 
-      total + parseFloat(item.product.priceAxm) * item.quantity, 0
-    );
   };
 
   const getCategoryIcon = (category: string) => {
@@ -282,7 +264,7 @@ export default function Marketplace() {
                   data-testid="button-view-cart"
                 >
                   <ShoppingCart className="h-4 w-4" />
-                  Cart ({cartItems.length})
+                  Cart ({getItemCount()})
                 </Button>
                 
                 {user && !myShop && (
@@ -718,6 +700,7 @@ export default function Marketplace() {
                         variant="ghost"
                         size="icon"
                         onClick={() => removeFromCart(item.product.id)}
+                        data-testid={`button-remove-cart-${item.product.id}`}
                       >
                         <AlertCircle className="h-4 w-4" />
                       </Button>
@@ -735,19 +718,16 @@ export default function Marketplace() {
                   </span>
                 </div>
                 
-                <Button className="w-full gap-2" disabled={!isConnected}>
-                  {isConnected ? (
-                    <>
-                      <Wallet className="h-4 w-4" />
-                      Checkout with AXM
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="h-4 w-4" />
-                      Connect Wallet to Checkout
-                    </>
-                  )}
-                </Button>
+                <Link href="/marketplace/checkout">
+                  <Button 
+                    className="w-full gap-2" 
+                    onClick={() => setShowCart(false)}
+                    data-testid="button-checkout"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    Proceed to Checkout
+                  </Button>
+                </Link>
               </div>
             )}
           </DialogContent>
@@ -823,7 +803,7 @@ export default function Marketplace() {
                     <Button 
                       className="flex-1 gap-2"
                       onClick={() => {
-                        addToCart(selectedProduct);
+                        handleAddToCart(selectedProduct);
                         setSelectedProduct(null);
                       }}
                       disabled={selectedProduct.inventory === 0}
