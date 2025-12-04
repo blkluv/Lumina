@@ -247,6 +247,47 @@ export default function AdminAcademy() {
         });
         setModuleTitle("");
         setModuleDescription("");
+        
+        const updatedCourse = await academy.getCourse(createdCourseId);
+        if (updatedCourse) {
+          setOnChainCourses(prev => 
+            prev.map(c => c.courseId === createdCourseId ? updatedCourse : c)
+          );
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Add Module Failed",
+        description: error.message || "Failed to add module",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingModule(false);
+    }
+  };
+
+  const handleQuickAddModule = async (courseId: number, courseTitle: string) => {
+    setIsAddingModule(true);
+    try {
+      const result = await academy.addModule(
+        courseId,
+        "Introduction",
+        `Welcome to ${courseTitle}. This module covers the fundamentals.`,
+        true
+      );
+      
+      if (result) {
+        toast({
+          title: "Module Added",
+          description: `Introduction module added to "${courseTitle}". TX: ${result.txHash?.slice(0, 10)}...`,
+        });
+        
+        const updatedCourse = await academy.getCourse(courseId);
+        if (updatedCourse) {
+          setOnChainCourses(prev => 
+            prev.map(c => c.courseId === courseId ? updatedCourse : c)
+          );
+        }
       }
     } catch (error: any) {
       toast({
@@ -708,7 +749,7 @@ export default function AdminAcademy() {
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
                             {course.status === 0 && course.moduleCount === 0 && (
                               <Badge variant="outline" className="text-yellow-500 border-yellow-500/30">
                                 Needs Module
@@ -717,6 +758,21 @@ export default function AdminAcademy() {
                             <Badge variant={course.status === 1 ? "default" : "secondary"}>
                               {course.status === 0 ? "Draft" : course.status === 1 ? "Published" : "Archived"}
                             </Badge>
+                            {course.status === 0 && course.moduleCount === 0 && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleQuickAddModule(course.courseId, course.title)}
+                                disabled={isAddingModule}
+                                data-testid={`button-quick-add-${course.courseId}`}
+                              >
+                                {isAddingModule ? (
+                                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Rocket className="h-3 w-3 mr-1" />
+                                )}
+                                Quick Add Intro
+                              </Button>
+                            )}
                             {course.status === 0 && (
                               <Button
                                 variant="outline"
@@ -725,7 +781,7 @@ export default function AdminAcademy() {
                                 data-testid={`button-select-course-${course.courseId}`}
                               >
                                 <Plus className="h-3 w-3 mr-1" />
-                                Add Module
+                                Custom Module
                               </Button>
                             )}
                           </div>
