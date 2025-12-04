@@ -10,7 +10,7 @@ The Lumina team takes security seriously. We appreciate your efforts to responsi
 
 Instead, please report security vulnerabilities by emailing:
 
-**security@axiomprotocol.io**
+**security@joinlumina.io**
 
 ### What to Include
 
@@ -64,7 +64,7 @@ Please include the following information in your report:
 
 For vulnerabilities in AXIOM Protocol smart contracts, please report to:
 
-**contracts@axiomprotocol.io**
+**contracts@joinlumina.io**
 
 Smart contract vulnerabilities may be eligible for our bug bounty program.
 
@@ -124,9 +124,9 @@ We thank the following researchers for responsibly disclosing vulnerabilities:
 
 ## Contact
 
-- **Security Issues**: security@axiomprotocol.io
-- **Smart Contracts**: contracts@axiomprotocol.io
-- **General Inquiries**: hello@axiomprotocol.io
+- **Security Issues**: security@joinlumina.io
+- **Smart Contracts**: contracts@joinlumina.io
+- **General Inquiries**: hello@joinlumina.io
 
 ---
 

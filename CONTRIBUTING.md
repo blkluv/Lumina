@@ -272,8 +272,8 @@ Any other relevant information.
 ## Questions?
 
 - Open a GitHub Discussion for general questions
-- Join our [Discord](https://discord.gg/axiom) for community support
-- Email developers@axiomprotocol.io for sensitive matters
+- Join our [Discord](https://discord.gg/joinlumina) for community support
+- Email developers@joinlumina.io for sensitive matters
 
 ---
 

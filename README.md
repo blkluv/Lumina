@@ -9,7 +9,7 @@
 
 **The Web3 Social Platform Where Creators Own Their Content**
 
-[Live Demo](https://lumina.app) · [Documentation](#documentation) · [Smart Contracts](https://github.com/AxiomProtocol/AXIOM)
+[Live Demo](https://joinlumina.io) · [Documentation](#documentation) · [Smart Contracts](https://github.com/AxiomProtocol/AXIOM)
 
 </div>
 
@@ -206,10 +206,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Links
 
-- 🌐 [Website](https://lumina.app)
-- 📖 [Documentation](https://docs.axiomprotocol.io)
-- 🐦 [Twitter](https://twitter.com/AxiomProtocol)
-- 💬 [Discord](https://discord.gg/axiom)
+- 🌐 [Website](https://joinlumina.io)
+- 📖 [Documentation](https://docs.joinlumina.io)
+- 🐦 [Twitter](https://twitter.com/JoinLumina)
+- 💬 [Discord](https://discord.gg/joinlumina)
 - 📜 [Smart Contracts](https://github.com/AxiomProtocol/AXIOM)
 
 ---
