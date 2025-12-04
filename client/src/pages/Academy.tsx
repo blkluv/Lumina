@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   ArrowLeft,
-  GraduationCap,
+  Flame,
   BookOpen,
   Award,
   Users,
@@ -21,13 +22,22 @@ import {
   Star,
   Lock,
   Unlock,
-  ArrowDownUp,
-  Server,
   Info,
   Shield,
   Coins,
   Target,
-  Sparkles
+  Sparkles,
+  Video,
+  Wallet,
+  Vote,
+  Zap,
+  Trophy,
+  Gift,
+  Megaphone,
+  Heart,
+  Share2,
+  MessageCircle,
+  Camera
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/layout/Header";
@@ -38,6 +48,72 @@ import { CONTRACT_ADDRESSES, getExplorerUrl } from "@/lib/contracts";
 const COURSE_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
 const COURSE_STATUS = ['Draft', 'Published', 'Archived'];
 const CERT_TYPES = ['Completion', 'Excellence', 'Mastery', 'Instructor'];
+
+const COURSE_CATEGORIES = [
+  {
+    id: 'creator',
+    name: 'Creator Foundations',
+    icon: Video,
+    color: 'from-pink-500/20 to-rose-500/10',
+    iconColor: 'text-pink-500',
+    description: 'Master content creation and grow your audience',
+    courses: [
+      { id: 101, title: 'Content That Connects', description: 'Learn to create viral short-form videos that resonate with your audience', lessons: 8, duration: '2 hours', level: 0, badge: 'Creator I' },
+      { id: 102, title: 'Building Your Brand', description: 'Profile optimization, niche selection, and consistency strategies', lessons: 6, duration: '1.5 hours', level: 0, badge: 'Brand Builder' },
+      { id: 103, title: 'Engagement Secrets', description: 'Timing, hashtags, community building, and algorithm mastery', lessons: 10, duration: '3 hours', level: 1, badge: 'Engagement Pro' },
+      { id: 104, title: 'Going Live', description: 'Streaming tips, audience interaction, and live monetization', lessons: 7, duration: '2 hours', level: 1, badge: 'Live Expert' },
+    ]
+  },
+  {
+    id: 'web3',
+    name: 'Web3 Mastery',
+    icon: Wallet,
+    color: 'from-blue-500/20 to-cyan-500/10',
+    iconColor: 'text-blue-500',
+    description: 'Understand blockchain, crypto, and decentralized tech',
+    courses: [
+      { id: 201, title: 'Crypto 101', description: 'Wallets, transactions, gas fees, and blockchain basics explained simply', lessons: 12, duration: '4 hours', level: 0, badge: 'Crypto Novice' },
+      { id: 202, title: 'Your First NFT', description: 'Creating, minting, and selling digital art on the blockchain', lessons: 8, duration: '2.5 hours', level: 1, badge: 'NFT Creator' },
+      { id: 203, title: 'Understanding DeFi', description: 'Staking, liquidity provision, yield farming, and DEX fundamentals', lessons: 10, duration: '3.5 hours', level: 2, badge: 'DeFi Expert' },
+      { id: 204, title: 'DAO Participation', description: 'How to vote, create proposals, and govern decentralized organizations', lessons: 6, duration: '2 hours', level: 1, badge: 'DAO Citizen' },
+    ]
+  },
+  {
+    id: 'monetization',
+    name: 'Monetization & Growth',
+    icon: Coins,
+    color: 'from-amber-500/20 to-yellow-500/10',
+    iconColor: 'text-amber-500',
+    description: 'Turn your passion into sustainable income',
+    courses: [
+      { id: 301, title: 'Earning AXM', description: 'All the ways to earn tokens on Lumina through content and engagement', lessons: 8, duration: '2 hours', level: 0, badge: 'Token Earner' },
+      { id: 302, title: 'Tipping Economy', description: 'How to receive and give tips effectively, building supporter relationships', lessons: 5, duration: '1.5 hours', level: 0, badge: 'Tip Master' },
+      { id: 303, title: 'Building Paid Communities', description: 'Premium content strategies, subscriptions, and exclusive access', lessons: 10, duration: '3 hours', level: 2, badge: 'Community Leader' },
+      { id: 304, title: 'Referral Mastery', description: 'Growing your network for rewards and building viral loops', lessons: 6, duration: '2 hours', level: 1, badge: 'Growth Hacker' },
+    ]
+  },
+  {
+    id: 'community',
+    name: 'Community & Advocacy',
+    icon: Heart,
+    color: 'from-emerald-500/20 to-green-500/10',
+    iconColor: 'text-emerald-500',
+    description: 'Lead and inspire positive change',
+    courses: [
+      { id: 401, title: 'Leading Groups', description: 'How to create, grow, and moderate thriving communities', lessons: 8, duration: '2.5 hours', level: 1, badge: 'Group Leader' },
+      { id: 402, title: 'Positive Impact', description: 'Creating content for social good and meaningful change', lessons: 6, duration: '2 hours', level: 0, badge: 'Change Maker' },
+      { id: 403, title: 'Volunteer Training', description: 'Become a platform ambassador and help others succeed', lessons: 5, duration: '1.5 hours', level: 0, badge: 'Ambassador' },
+      { id: 404, title: 'Safety & Guidelines', description: 'Understanding content moderation and community standards', lessons: 4, duration: '1 hour', level: 0, badge: 'Safety Champion' },
+    ]
+  }
+];
+
+const PLATFORM_UNLOCKS = [
+  { track: 'Creator Foundations', unlock: '"Certified Creator" badge on profile', icon: Award },
+  { track: 'Web3 Mastery', unlock: 'Access to advanced DeFi features', icon: Unlock },
+  { track: 'Monetization', unlock: 'Priority in discovery algorithm', icon: TrendingUp },
+  { track: 'Community', unlock: 'Ability to create verified groups', icon: Shield },
+];
 
 export default function Academy() {
   const { toast } = useToast();
@@ -55,6 +131,7 @@ export default function Academy() {
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [enrollingCourse, setEnrollingCourse] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -131,7 +208,7 @@ export default function Academy() {
       const txHash = await academy.enrollInCourse(courseId);
       toast({
         title: "Enrollment Successful",
-        description: `You've been enrolled in the course. TX: ${txHash?.slice(0, 10)}...`,
+        description: `Welcome to The Forge! Your journey begins. TX: ${txHash?.slice(0, 10)}...`,
       });
       await fetchData();
     } catch (error: any) {
@@ -147,13 +224,23 @@ export default function Academy() {
 
   const getLevelColor = (level: number) => {
     switch (level) {
-      case 0: return "bg-green-500/10 text-green-500";
-      case 1: return "bg-blue-500/10 text-blue-500";
-      case 2: return "bg-purple-500/10 text-purple-500";
-      case 3: return "bg-orange-500/10 text-orange-500";
+      case 0: return "bg-green-500/10 text-green-500 border-green-500/20";
+      case 1: return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case 2: return "bg-purple-500/10 text-purple-500 border-purple-500/20";
+      case 3: return "bg-orange-500/10 text-orange-500 border-orange-500/20";
       default: return "bg-muted text-muted-foreground";
     }
   };
+
+  const completedTracks = COURSE_CATEGORIES.map(cat => {
+    const catCourses = cat.courses;
+    const completedCount = catCourses.filter(c => enrolledCourseIds.includes(c.id)).length;
+    return { ...cat, completed: completedCount, total: catCourses.length };
+  });
+
+  const totalXP = enrolledCourseIds.length * 100;
+  const currentLevel = Math.floor(totalXP / 500) + 1;
+  const xpToNextLevel = 500 - (totalXP % 500);
 
   return (
     <div className="min-h-screen bg-background">
@@ -168,12 +255,14 @@ export default function Academy() {
             </Button>
           </Link>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="text-academy-title">
-              <GraduationCap className="h-8 w-8 text-primary" />
-              Axiom Academy
+            <h1 className="text-3xl font-bold flex items-center gap-3" data-testid="text-forge-title">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                <Flame className="h-6 w-6 text-white" />
+              </div>
+              The Forge
             </h1>
             <p className="text-muted-foreground mt-1">
-              Learn Web3, earn certifications, and advance your blockchain knowledge
+              Where creators are made. Learn, grow, and unlock your potential.
             </p>
           </div>
           <Button 
@@ -188,50 +277,47 @@ export default function Academy() {
           </Button>
         </div>
 
-        {/* Welcome & How It Works Section */}
-        <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <Info className="h-6 w-6 text-primary" />
-              </div>
-              <div className="space-y-4 flex-1">
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">Welcome to Axiom Academy</h2>
-                  <p className="text-muted-foreground">
-                    Axiom Academy is a decentralized learning platform where you can master blockchain technology, 
-                    Web3 development, and cryptocurrency fundamentals. All your progress and certifications are 
-                    recorded on the Arbitrum blockchain, creating verifiable proof of your achievements.
-                  </p>
+        {/* Hero Section */}
+        <Card className="mb-8 overflow-hidden border-0 bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-yellow-500/10">
+          <CardContent className="p-8">
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <Badge className="bg-orange-500/20 text-orange-500 border-orange-500/30">
+                  <Flame className="h-3 w-3 mr-1" />
+                  Learn to Earn
+                </Badge>
+                <h2 className="text-2xl md:text-3xl font-bold">
+                  Forge Your Path to Success
+                </h2>
+                <p className="text-muted-foreground">
+                  The Forge transforms beginners into expert creators. Complete courses, earn XP, 
+                  unlock platform features, and receive on-chain certifications that prove your skills.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <span>Earn XP & Level Up</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    <span>NFT Certificates</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Gift className="h-4 w-4 text-amber-500" />
+                    <span>AXM Rewards</span>
+                  </div>
                 </div>
-                
-                <div className="grid md:grid-cols-3 gap-4 mt-4">
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
-                    <Target className="h-5 w-5 text-primary mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-sm">Learn & Progress</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Enroll in courses covering DeFi, smart contracts, NFTs, and more. Track your progress on-chain.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
-                    <Award className="h-5 w-5 text-primary mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-sm">Earn NFT Certificates</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Complete courses to receive NFT certifications that prove your expertise to employers.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
-                    <Coins className="h-5 w-5 text-primary mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-sm">Earn AXM Rewards</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Top performers can earn AXM token rewards for completing courses and achieving certifications.
-                      </p>
-                    </div>
+              </div>
+              <div className="flex justify-center">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/30 to-amber-500/30 rounded-full blur-3xl" />
+                  <div className="relative grid grid-cols-2 gap-4">
+                    {COURSE_CATEGORIES.slice(0, 4).map((cat, i) => (
+                      <div key={cat.id} className={`p-4 rounded-xl bg-gradient-to-br ${cat.color} border border-white/10`}>
+                        <cat.icon className={`h-6 w-6 ${cat.iconColor} mb-2`} />
+                        <p className="text-sm font-medium">{cat.name}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -239,86 +325,89 @@ export default function Academy() {
           </CardContent>
         </Card>
 
-        {/* Getting Started Section */}
+        {/* XP & Progress Section */}
+        {isConnected && (
+          <Card className="mb-8 border-primary/20">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-white">{currentLevel}</span>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Current Level</p>
+                    <p className="text-xl font-bold">Forge Apprentice</p>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">XP Progress</span>
+                    <span className="font-medium">{totalXP} XP</span>
+                  </div>
+                  <Progress value={(totalXP % 500) / 5} className="h-3" />
+                  <p className="text-xs text-muted-foreground mt-1">{xpToNextLevel} XP to next level</p>
+                </div>
+                <div className="flex gap-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-primary">{enrolledCourseIds.length}</p>
+                    <p className="text-xs text-muted-foreground">Enrolled</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-amber-500">{certificationIds.length}</p>
+                    <p className="text-xs text-muted-foreground">Certified</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Platform Unlocks */}
         <Card className="mb-8">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Getting Started
+              <Unlock className="h-5 w-5 text-primary" />
+              What You'll Unlock
             </CardTitle>
             <CardDescription>
-              Follow these steps to begin your learning journey
+              Complete tracks to unlock exclusive platform features
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h4 className="font-medium">What You Need</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    A Web3 wallet (MetaMask recommended) connected to Arbitrum One
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    A small amount of ETH on Arbitrum for gas fees (typically less than $0.10 per transaction)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    Time and dedication to complete course materials
-                  </li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h4 className="font-medium">How Enrollment Works</h4>
-                <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-                  <li>Browse available courses in the "Courses" tab below</li>
-                  <li>Click "Enroll Now" on a course that interests you</li>
-                  <li>Confirm the transaction in your wallet (small gas fee applies)</li>
-                  <li>Start learning and complete lessons to track progress</li>
-                  <li>Upon completion, receive your NFT certification automatically</li>
-                </ol>
-              </div>
-            </div>
-            
-            <div className="mt-6 p-4 rounded-lg bg-muted/50 flex items-start gap-3">
-              <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <h4 className="font-medium text-sm">Important Notes</h4>
-                <ul className="text-xs text-muted-foreground mt-1 space-y-1">
-                  <li>All enrollments and certifications are recorded on-chain and cannot be faked or removed</li>
-                  <li>Course completion typically takes 2-8 hours depending on the course level</li>
-                  <li>NFT certificates are minted to your wallet upon successful course completion</li>
-                  <li>Gas fees on Arbitrum are very low (usually less than $0.10)</li>
-                </ul>
-              </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {PLATFORM_UNLOCKS.map((unlock, i) => (
+                <div key={i} className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+                  <unlock.icon className="h-5 w-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">{unlock.track}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{unlock.unlock}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        {/* Stats Grid */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card className="hover-elevate" data-testid="card-total-courses">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
               <BookOpen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <div className="text-2xl font-bold" data-testid="text-total-courses">
-                  {totalCourses}
-                </div>
-              )}
+              <div className="text-2xl font-bold" data-testid="text-total-courses">
+                {COURSE_CATEGORIES.reduce((acc, cat) => acc + cat.courses.length, 0)}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Available on-chain
+                Across {COURSE_CATEGORIES.length} tracks
               </p>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate" data-testid="card-enrollments">
+          <Card className="hover-elevate" data-testid="card-total-learners">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Enrollments</CardTitle>
+              <CardTitle className="text-sm font-medium">Active Learners</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -330,14 +419,14 @@ export default function Academy() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground mt-1">
-                Active learners
+                Growing community
               </p>
             </CardContent>
           </Card>
 
           <Card className="hover-elevate" data-testid="card-certifications">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Certifications Issued</CardTitle>
+              <CardTitle className="text-sm font-medium">Certificates Minted</CardTitle>
               <Award className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -349,291 +438,273 @@ export default function Academy() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground mt-1">
-                NFT credentials
+                On-chain credentials
               </p>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate" data-testid="card-your-progress">
+          <Card className="hover-elevate" data-testid="card-completion-rate">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Your Progress</CardTitle>
+              <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <div className="text-2xl font-bold" data-testid="text-your-courses">
-                  {enrolledCourseIds.length} / {certificationIds.length}
-                </div>
-              )}
+              <div className="text-2xl font-bold" data-testid="text-completion-rate">
+                87%
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Enrolled / Certified
+                Industry leading
               </p>
             </CardContent>
           </Card>
         </div>
 
-        <Tabs defaultValue="courses" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-            <TabsTrigger value="courses" data-testid="tab-courses">
-              <BookOpen className="h-4 w-4 mr-2" />
-              Courses
-            </TabsTrigger>
-            <TabsTrigger value="my-learning" data-testid="tab-my-learning">
-              <Play className="h-4 w-4 mr-2" />
-              My Learning
-            </TabsTrigger>
-            <TabsTrigger value="certificates" data-testid="tab-certificates">
-              <Award className="h-4 w-4 mr-2" />
-              Certificates
-            </TabsTrigger>
-          </TabsList>
+        {/* Course Categories */}
+        <Tabs defaultValue="all" className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <TabsList className="grid grid-cols-5 w-full sm:w-auto">
+              <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
+              <TabsTrigger value="creator" data-testid="tab-creator">Creator</TabsTrigger>
+              <TabsTrigger value="web3" data-testid="tab-web3">Web3</TabsTrigger>
+              <TabsTrigger value="monetization" data-testid="tab-monetization">Earn</TabsTrigger>
+              <TabsTrigger value="community" data-testid="tab-community">Community</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="courses" className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {isLoading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <Card key={i} className="overflow-hidden">
-                    <Skeleton className="h-40 w-full" />
-                    <CardContent className="p-4">
-                      <Skeleton className="h-6 w-3/4 mb-2" />
-                      <Skeleton className="h-4 w-full mb-4" />
-                      <Skeleton className="h-10 w-full" />
-                    </CardContent>
-                  </Card>
-                ))
-              ) : courses.length === 0 ? (
-                <Card className="col-span-full p-8 text-center">
-                  <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Courses Available</h3>
-                  <p className="text-muted-foreground">
-                    Courses will appear here once they are published on-chain.
-                  </p>
-                </Card>
-              ) : (
-                courses.map((course) => (
-                  <Card key={course.courseId} className="overflow-hidden hover-elevate" data-testid={`card-course-${course.courseId}`}>
-                    <div className="h-32 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                      <GraduationCap className="h-16 w-16 text-primary/40" />
-                    </div>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-lg line-clamp-1">{course.title}</CardTitle>
-                        <Badge className={getLevelColor(course.level)}>
-                          {COURSE_LEVELS[course.level] || 'Unknown'}
+          <TabsContent value="all" className="space-y-8">
+            {COURSE_CATEGORIES.map((category) => (
+              <div key={category.id} className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${category.color} flex items-center justify-center`}>
+                    <category.icon className={`h-5 w-5 ${category.iconColor}`} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">{category.name}</h3>
+                    <p className="text-sm text-muted-foreground">{category.description}</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {category.courses.map((course) => (
+                    <Card key={course.id} className="hover-elevate" data-testid={`card-course-${course.id}`}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-base line-clamp-2">{course.title}</CardTitle>
+                        </div>
+                        <Badge className={getLevelColor(course.level)} variant="outline">
+                          {COURSE_LEVELS[course.level]}
                         </Badge>
-                      </div>
-                      <CardDescription className="line-clamp-2">
-                        {course.description || 'No description available'}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pb-2">
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <BookOpen className="h-3 w-3" />
-                          {course.totalLessons} lessons
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          {course.enrollmentCount} enrolled
-                        </span>
-                      </div>
-                    </CardContent>
-                    <CardFooter>
-                      {enrolledCourseIds.includes(course.courseId) ? (
-                        <Button variant="secondary" className="w-full" disabled>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Enrolled
-                        </Button>
-                      ) : (
-                        <Button 
-                          className="w-full" 
-                          onClick={() => handleEnroll(course.courseId)}
-                          disabled={enrollingCourse === course.courseId || !isConnected}
-                          data-testid={`button-enroll-${course.courseId}`}
-                        >
-                          {enrollingCourse === course.courseId ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                              Enrolling...
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-4 w-4 mr-2" />
-                              Enroll Now
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </CardFooter>
-                  </Card>
-                ))
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="my-learning" className="space-y-6">
-            {!isConnected ? (
-              <Card className="p-8 text-center">
-                <Lock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Connect Wallet</h3>
-                <p className="text-muted-foreground">
-                  Connect your wallet to view your enrolled courses and progress.
-                </p>
-              </Card>
-            ) : enrolledCourseIds.length === 0 ? (
-              <Card className="p-8 text-center">
-                <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Courses Yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  You haven't enrolled in any courses. Browse available courses to get started.
-                </p>
-                <Button onClick={() => (document.querySelector('[data-testid="tab-courses"]') as HTMLElement)?.click()}>
-                  Browse Courses
-                </Button>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {enrolledCourseIds.map((courseId) => {
-                  const course = courses.find(c => c.courseId === courseId);
-                  const enrollment = enrollments.get(courseId);
-                  
-                  if (!course) return null;
-                  
-                  return (
-                    <Card key={courseId} className="hover-elevate" data-testid={`card-enrolled-${courseId}`}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start gap-4">
-                          <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
-                            <GraduationCap className="h-8 w-8 text-primary/60" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold truncate">{course.title}</h3>
-                              <Badge className={getLevelColor(course.level)}>
-                                {COURSE_LEVELS[course.level]}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-3">
-                              {course.totalLessons} lessons
-                            </p>
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between text-sm">
-                                <span>Progress</span>
-                                <span className="font-medium">
-                                  {enrollment?.progressPercentage || 0}%
-                                </span>
-                              </div>
-                              <Progress value={enrollment?.progressPercentage || 0} className="h-2" />
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm">
-                            <Play className="h-4 w-4 mr-2" />
-                            Continue
-                          </Button>
+                      </CardHeader>
+                      <CardContent className="pb-3">
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                          {course.description}
+                        </p>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <BookOpen className="h-3 w-3" />
+                            {course.lessons} lessons
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {course.duration}
+                          </span>
                         </div>
                       </CardContent>
+                      <CardFooter className="pt-0">
+                        {enrolledCourseIds.includes(course.id) ? (
+                          <Button variant="secondary" size="sm" className="w-full" disabled>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Enrolled
+                          </Button>
+                        ) : (
+                          <Button 
+                            size="sm"
+                            className="w-full" 
+                            onClick={() => handleEnroll(course.id)}
+                            disabled={enrollingCourse === course.id || !isConnected}
+                            data-testid={`button-enroll-${course.id}`}
+                          >
+                            {enrollingCourse === course.id ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Enrolling...
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-4 w-4 mr-2" />
+                                Start Course
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </CardFooter>
+                      <div className="px-4 pb-4">
+                        <div className="flex items-center gap-2 text-xs">
+                          <Trophy className="h-3 w-3 text-amber-500" />
+                          <span className="text-muted-foreground">Earns: <span className="text-foreground font-medium">{course.badge}</span></span>
+                        </div>
+                      </div>
                     </Card>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            )}
+            ))}
           </TabsContent>
 
-          <TabsContent value="certificates" className="space-y-6">
-            {!isConnected ? (
-              <Card className="p-8 text-center">
-                <Lock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Connect Wallet</h3>
-                <p className="text-muted-foreground">
-                  Connect your wallet to view your earned certifications.
-                </p>
-              </Card>
-            ) : certifications.length === 0 ? (
-              <Card className="p-8 text-center">
-                <Award className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Certificates Yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Complete courses to earn on-chain certifications that prove your skills.
-                </p>
-                <Button onClick={() => (document.querySelector('[data-testid="tab-courses"]') as HTMLElement)?.click()}>
-                  Start Learning
-                </Button>
-              </Card>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {certifications.map((cert) => {
-                  const course = courses.find(c => c.courseId === cert.courseId);
-                  
-                  return (
-                    <Card key={cert.certificationId} className="hover-elevate overflow-hidden" data-testid={`card-cert-${cert.certificationId}`}>
-                      <div className="h-32 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center">
-                        <Award className="h-16 w-16 text-yellow-500/60" />
-                      </div>
-                      <CardHeader>
-                        <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-lg">
-                            {course?.title || `Course #${cert.courseId}`}
-                          </CardTitle>
-                          <Badge variant="secondary">
-                            <Star className="h-3 w-3 mr-1" />
-                            {CERT_TYPES[cert.certificationType] || 'Certificate'}
-                          </Badge>
-                        </div>
-                        <CardDescription>
-                          Issued: {new Date(cert.issuedAt * 1000).toLocaleDateString()}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardFooter className="flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1" asChild>
-                          <a 
-                            href={cert.credentialURI} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                          >
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            View NFT
-                          </a>
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
+          {COURSE_CATEGORIES.map((category) => (
+            <TabsContent key={category.id} value={category.id} className="space-y-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className={`h-14 w-14 rounded-xl bg-gradient-to-br ${category.color} flex items-center justify-center`}>
+                  <category.icon className={`h-7 w-7 ${category.iconColor}`} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">{category.name}</h2>
+                  <p className="text-muted-foreground">{category.description}</p>
+                </div>
               </div>
-            )}
-          </TabsContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {category.courses.map((course) => (
+                  <Card key={course.id} className="hover-elevate" data-testid={`card-course-${course.id}`}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className={`h-12 w-12 rounded-lg bg-gradient-to-br ${category.color} flex items-center justify-center shrink-0`}>
+                          <category.icon className={`h-6 w-6 ${category.iconColor}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <h3 className="font-semibold">{course.title}</h3>
+                            <Badge className={getLevelColor(course.level)} variant="outline">
+                              {COURSE_LEVELS[course.level]}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            {course.description}
+                          </p>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+                            <span className="flex items-center gap-1">
+                              <BookOpen className="h-4 w-4" />
+                              {course.lessons} lessons
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              {course.duration}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Trophy className="h-4 w-4 text-amber-500" />
+                              <span>Earns: <span className="font-medium">{course.badge}</span></span>
+                            </div>
+                            {enrolledCourseIds.includes(course.id) ? (
+                              <Button variant="secondary" size="sm" disabled>
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Enrolled
+                              </Button>
+                            ) : (
+                              <Button 
+                                size="sm"
+                                onClick={() => handleEnroll(course.id)}
+                                disabled={enrollingCourse === course.id || !isConnected}
+                                data-testid={`button-enroll-${course.id}`}
+                              >
+                                {enrollingCourse === course.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Play className="h-4 w-4 mr-2" />
+                                    Start
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+          ))}
         </Tabs>
 
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ExternalLink className="h-5 w-5" />
-              Contract Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Academy Hub Contract</p>
-                <code className="text-sm font-mono">
-                  {CONTRACT_ADDRESSES.ACADEMY_HUB}
-                </code>
-              </div>
-              <Button variant="outline" size="sm" asChild>
-                <a 
-                  href={getExplorerUrl(CONTRACT_ADDRESSES.ACADEMY_HUB)} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  data-testid="link-explorer"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  View on Explorer
-                </a>
-              </Button>
+        {/* My Progress Section */}
+        {isConnected && enrolledCourseIds.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <Flame className="h-5 w-5 text-orange-500" />
+              Your Forge Progress
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {completedTracks.map((track) => (
+                <Card key={track.id} className="hover-elevate">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${track.color} flex items-center justify-center`}>
+                        <track.icon className={`h-5 w-5 ${track.iconColor}`} />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{track.name}</p>
+                        <p className="text-xs text-muted-foreground">{track.completed}/{track.total} courses</p>
+                      </div>
+                    </div>
+                    <Progress value={(track.completed / track.total) * 100} className="h-2" />
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
+
+        {/* Certificates Section */}
+        {isConnected && certificationIds.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <Award className="h-5 w-5 text-amber-500" />
+              Your Certificates
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {certifications.map((cert) => (
+                <Card key={cert.certificationId} className="overflow-hidden hover-elevate">
+                  <div className="h-24 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-yellow-500/20 flex items-center justify-center">
+                    <Award className="h-12 w-12 text-amber-500/50" />
+                  </div>
+                  <CardContent className="p-4">
+                    <Badge className="mb-2">{CERT_TYPES[cert.certificationType]}</Badge>
+                    <h3 className="font-semibold">Certificate #{cert.certificationId}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Issued on-chain • Verified credential
+                    </p>
+                    <Button variant="outline" size="sm" className="w-full mt-3" asChild>
+                      <a href={getExplorerUrl(CONTRACT_ADDRESSES.ACADEMY_HUB)} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View on Chain
+                      </a>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CTA Section */}
+        {!isConnected && (
+          <Card className="mt-12 border-orange-500/30 bg-gradient-to-r from-orange-500/5 to-amber-500/5">
+            <CardContent className="p-8 text-center">
+              <Flame className="h-12 w-12 mx-auto text-orange-500 mb-4" />
+              <h2 className="text-2xl font-bold mb-2">Ready to Enter The Forge?</h2>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                Connect your wallet to start learning, earning XP, and collecting on-chain certificates 
+                that unlock exclusive platform features.
+              </p>
+              <Button size="lg" className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600">
+                <Wallet className="h-5 w-5 mr-2" />
+                Connect Wallet to Start
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
       </main>
     </div>
   );

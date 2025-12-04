@@ -27,7 +27,7 @@ const communityItems = [
 
 const web3Items = [
   { href: "/bridge", label: "Bridge", icon: ArrowLeftRight },
-  { href: "/academy", label: "Academy", icon: GraduationCap },
+  { href: "/academy", label: "The Forge", icon: GraduationCap },
   { href: "/exchange", label: "Exchange", icon: ArrowDownUp },
   { href: "/nodes", label: "DePIN Nodes", icon: Server },
   { href: "/nfts", label: "NFT Gallery", icon: ImageIcon },

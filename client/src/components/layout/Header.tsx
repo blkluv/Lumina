@@ -115,7 +115,7 @@ export function Header() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/academy")} data-testid="button-academy">
                   <GraduationCap className="h-4 w-4 mr-2" />
-                  Academy
+                  The Forge
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/nodes")} data-testid="button-nodes">
                   <Server className="h-4 w-4 mr-2" />

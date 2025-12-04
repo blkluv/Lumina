@@ -23,7 +23,7 @@ const navItems = [
   { href: "/nfts", label: "NFT Gallery", icon: ImageIcon },
   { href: "/governance", label: "DAO", icon: Vote },
   { href: "/staking", label: "Staking", icon: Lock },
-  { href: "/academy", label: "Academy", icon: GraduationCap },
+  { href: "/academy", label: "The Forge", icon: GraduationCap },
   { href: "/exchange", label: "Exchange", icon: ArrowDownUp },
   { href: "/nodes", label: "DePIN Nodes", icon: Server },
   { href: "/referrals", label: "Referrals", icon: Gift },
