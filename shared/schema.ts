@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, pgEnum, serial } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -3103,4 +3103,791 @@ export interface ContentAppealWithDetails extends ContentAppeal {
   violation: typeof contentViolations.$inferSelect;
   user: User;
   reviewer?: User;
+}
+
+// ============= LUMINA MARKETPLACE - PHASE 1: CORE SHOP & PRODUCTS =============
+
+export const shopStatusEnum = pgEnum("shop_status", ["pending", "active", "suspended", "closed"]);
+export const shopProductStatusEnum = pgEnum("shop_product_status", ["draft", "active", "paused", "sold_out", "archived"]);
+export const shopOrderStatusEnum = pgEnum("shop_order_status", ["pending", "paid", "processing", "shipped", "delivered", "cancelled", "refunded", "disputed"]);
+export const shopProductCategoryEnum = pgEnum("shop_product_category", [
+  "digital", "physical", "service", "nft", "subscription", "course", "merchandise", "art", "music", "other"
+]);
+export const shopProductTypeEnum = pgEnum("shop_product_type", ["one_time", "subscription", "auction", "pre_order"]);
+
+export const shops = pgTable("shops", {
+  id: serial("id").primaryKey(),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  logoUrl: text("logo_url"),
+  bannerUrl: text("banner_url"),
+  category: shopProductCategoryEnum("category").default("other"),
+  status: shopStatusEnum("status").default("pending"),
+  shopNftTokenId: text("shop_nft_token_id"),
+  walletAddress: text("wallet_address"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  website: text("website"),
+  socialLinks: jsonb("social_links"),
+  policies: jsonb("policies"),
+  shippingInfo: jsonb("shipping_info"),
+  totalSales: integer("total_sales").default(0),
+  totalRevenue: text("total_revenue").default("0"),
+  totalProducts: integer("total_products").default(0),
+  rating: integer("rating").default(0),
+  reviewCount: integer("review_count").default(0),
+  isVerified: boolean("is_verified").default(false),
+  featuredAt: timestamp("featured_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const shopsRelations = relations(shops, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [shops.ownerId],
+    references: [users.id],
+  }),
+  products: many(shopProducts),
+  orders: many(shopOrders),
+  affiliateProgram: one(affiliatePrograms),
+}));
+
+export const shopProducts = pgTable("shop_products", {
+  id: serial("id").primaryKey(),
+  shopId: integer("shop_id").notNull(),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  shortDescription: text("short_description"),
+  mediaUrls: text("media_urls").array(),
+  thumbnailUrl: text("thumbnail_url"),
+  category: shopProductCategoryEnum("category").default("other"),
+  productType: shopProductTypeEnum("product_type").default("one_time"),
+  status: shopProductStatusEnum("status").default("draft"),
+  priceAxm: text("price_axm").notNull(),
+  compareAtPriceAxm: text("compare_at_price_axm"),
+  costAxm: text("cost_axm"),
+  inventory: integer("inventory"),
+  trackInventory: boolean("track_inventory").default(false),
+  allowBackorder: boolean("allow_backorder").default(false),
+  sku: text("sku"),
+  weight: integer("weight"),
+  dimensions: jsonb("dimensions"),
+  attributes: jsonb("attributes"),
+  tags: text("tags").array(),
+  isDigital: boolean("is_digital").default(false),
+  digitalFileUrl: text("digital_file_url"),
+  requiresShipping: boolean("requires_shipping").default(true),
+  nftTokenId: text("nft_token_id"),
+  provenanceCertId: text("provenance_cert_id"),
+  totalSales: integer("total_sales").default(0),
+  totalRevenue: text("total_revenue").default("0"),
+  viewCount: integer("view_count").default(0),
+  rating: integer("rating").default(0),
+  reviewCount: integer("review_count").default(0),
+  affiliateCommissionBps: integer("affiliate_commission_bps").default(1000),
+  isFeatured: boolean("is_featured").default(false),
+  featuredAt: timestamp("featured_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const shopProductsRelations = relations(shopProducts, ({ one, many }) => ({
+  shop: one(shops, {
+    fields: [shopProducts.shopId],
+    references: [shops.id],
+  }),
+  orderItems: many(shopOrderItems),
+  reviews: many(productReviews),
+  affiliateLinks: many(affiliateLinks),
+}));
+
+export const shopOrders = pgTable("shop_orders", {
+  id: serial("id").primaryKey(),
+  orderNumber: text("order_number").notNull().unique(),
+  shopId: integer("shop_id").notNull(),
+  buyerId: varchar("buyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: shopOrderStatusEnum("status").default("pending"),
+  subtotalAxm: text("subtotal_axm").notNull(),
+  shippingAxm: text("shipping_axm").default("0"),
+  discountAxm: text("discount_axm").default("0"),
+  totalAxm: text("total_axm").notNull(),
+  platformFeeAxm: text("platform_fee_axm").default("0"),
+  affiliateFeeAxm: text("affiliate_fee_axm").default("0"),
+  sellerReceivesAxm: text("seller_receives_axm").notNull(),
+  paymentTxHash: text("payment_tx_hash"),
+  paymentConfirmedAt: timestamp("payment_confirmed_at"),
+  affiliateLinkId: integer("affiliate_link_id"),
+  shippingAddress: jsonb("shipping_address"),
+  shippingMethod: text("shipping_method"),
+  trackingNumber: text("tracking_number"),
+  trackingUrl: text("tracking_url"),
+  notes: text("notes"),
+  buyerNotes: text("buyer_notes"),
+  liveSessionId: varchar("live_session_id"),
+  cashbackAmount: text("cashback_amount").default("0"),
+  cashbackTxHash: text("cashback_tx_hash"),
+  paidAt: timestamp("paid_at"),
+  shippedAt: timestamp("shipped_at"),
+  deliveredAt: timestamp("delivered_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  refundedAt: timestamp("refunded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const shopOrdersRelations = relations(shopOrders, ({ one, many }) => ({
+  shop: one(shops, {
+    fields: [shopOrders.shopId],
+    references: [shops.id],
+  }),
+  buyer: one(users, {
+    fields: [shopOrders.buyerId],
+    references: [users.id],
+  }),
+  items: many(shopOrderItems),
+  dispute: one(disputes),
+  affiliateLink: one(affiliateLinks, {
+    fields: [shopOrders.affiliateLinkId],
+    references: [affiliateLinks.id],
+  }),
+}));
+
+export const shopOrderItems = pgTable("shop_order_items", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  productId: integer("product_id").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  priceAxm: text("price_axm").notNull(),
+  totalAxm: text("total_axm").notNull(),
+  attributes: jsonb("attributes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const shopOrderItemsRelations = relations(shopOrderItems, ({ one }) => ({
+  order: one(shopOrders, {
+    fields: [shopOrderItems.orderId],
+    references: [shopOrders.id],
+  }),
+  product: one(shopProducts, {
+    fields: [shopOrderItems.productId],
+    references: [shopProducts.id],
+  }),
+}));
+
+export const shopPayouts = pgTable("shop_payouts", {
+  id: serial("id").primaryKey(),
+  shopId: integer("shop_id").notNull(),
+  orderId: integer("order_id"),
+  recipientId: integer("recipient_id").notNull(),
+  recipientWallet: text("recipient_wallet").notNull(),
+  amountAxm: text("amount_axm").notNull(),
+  payoutType: text("payout_type").notNull(),
+  txHash: text("tx_hash"),
+  status: text("status").default("pending"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const shopPayoutsRelations = relations(shopPayouts, ({ one }) => ({
+  shop: one(shops, {
+    fields: [shopPayouts.shopId],
+    references: [shops.id],
+  }),
+  order: one(shopOrders, {
+    fields: [shopPayouts.orderId],
+    references: [shopOrders.id],
+  }),
+  recipient: one(users, {
+    fields: [shopPayouts.recipientId],
+    references: [users.id],
+  }),
+}));
+
+// ============= LUMINA MARKETPLACE - PHASE 2: AFFILIATES & BOUNTIES =============
+
+export const affiliatePrograms = pgTable("affiliate_programs", {
+  id: serial("id").primaryKey(),
+  shopId: integer("shop_id").notNull().unique(),
+  name: text("name"),
+  description: text("description"),
+  commissionType: text("commission_type").default("percentage"),
+  commissionRate: text("commission_rate").default("10"),
+  cookieDuration: integer("cookie_duration").default(30),
+  isActive: boolean("is_active").default(true),
+  autoApprove: boolean("auto_approve").default(true),
+  terms: text("terms"),
+  minPayout: text("min_payout").default("10"),
+  allowSelfReferral: boolean("allow_self_referral").default(false),
+  tierEnabled: boolean("tier_enabled").default(false),
+  tierRates: jsonb("tier_rates"),
+  totalAffiliates: integer("total_affiliates").default(0),
+  totalPayouts: text("total_payouts").default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const affiliateProgramsRelations = relations(affiliatePrograms, ({ one, many }) => ({
+  shop: one(shops, {
+    fields: [affiliatePrograms.shopId],
+    references: [shops.id],
+  }),
+  links: many(affiliateLinks),
+  bounties: many(bounties),
+}));
+
+export const affiliateLinkStatusEnum = pgEnum("affiliate_link_status", ["active", "paused", "expired"]);
+
+export const affiliateLinks = pgTable("affiliate_links", {
+  id: serial("id").primaryKey(),
+  programId: integer("program_id").notNull(),
+  affiliateUserId: varchar("affiliate_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  productId: integer("product_id"),
+  code: text("code").notNull().unique(),
+  url: text("url"),
+  status: affiliateLinkStatusEnum("status").default("active"),
+  clicks: integer("clicks").default(0),
+  conversions: integer("conversions").default(0),
+  earnings: text("earnings").default("0"),
+  revenue: text("revenue").default("0"),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const affiliateLinksRelations = relations(affiliateLinks, ({ one, many }) => ({
+  program: one(affiliatePrograms, {
+    fields: [affiliateLinks.programId],
+    references: [affiliatePrograms.id],
+  }),
+  affiliateUser: one(users, {
+    fields: [affiliateLinks.affiliateUserId],
+    references: [users.id],
+  }),
+  product: one(shopProducts, {
+    fields: [affiliateLinks.productId],
+    references: [shopProducts.id],
+  }),
+  earnings: many(affiliateEarnings),
+  orders: many(shopOrders),
+}));
+
+export const affiliateEarnings = pgTable("affiliate_earnings", {
+  id: serial("id").primaryKey(),
+  affiliateLinkId: integer("affiliate_link_id").notNull(),
+  orderId: integer("order_id").notNull(),
+  amount: text("amount").notNull(),
+  status: text("status").default("pending"),
+  txHash: text("tx_hash"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const affiliateEarningsRelations = relations(affiliateEarnings, ({ one }) => ({
+  link: one(affiliateLinks, {
+    fields: [affiliateEarnings.affiliateLinkId],
+    references: [affiliateLinks.id],
+  }),
+  order: one(shopOrders, {
+    fields: [affiliateEarnings.orderId],
+    references: [shopOrders.id],
+  }),
+}));
+
+export const bountyStatusEnum = pgEnum("bounty_status", ["open", "in_progress", "completed", "cancelled", "expired"]);
+
+export const bounties = pgTable("bounties", {
+  id: serial("id").primaryKey(),
+  programId: integer("program_id"),
+  creatorId: integer("creator_id").notNull(),
+  shopId: integer("shop_id"),
+  productId: integer("product_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  bountyType: text("bounty_type").notNull(),
+  rewardAmount: text("reward_amount").notNull(),
+  totalBudget: text("total_budget").notNull(),
+  remainingBudget: text("remaining_budget").notNull(),
+  maxClaims: integer("max_claims").default(1),
+  claimedCount: integer("claimed_count").default(0),
+  requirements: jsonb("requirements"),
+  status: bountyStatusEnum("status").default("open"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const bountiesRelations = relations(bounties, ({ one, many }) => ({
+  program: one(affiliatePrograms, {
+    fields: [bounties.programId],
+    references: [affiliatePrograms.id],
+  }),
+  creator: one(users, {
+    fields: [bounties.creatorId],
+    references: [users.id],
+  }),
+  shop: one(shops, {
+    fields: [bounties.shopId],
+    references: [shops.id],
+  }),
+  product: one(shopProducts, {
+    fields: [bounties.productId],
+    references: [shopProducts.id],
+  }),
+  claims: many(bountyClaims),
+}));
+
+export const bountyClaims = pgTable("bounty_claims", {
+  id: serial("id").primaryKey(),
+  bountyId: integer("bounty_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").default("pending"),
+  proofUrl: text("proof_url"),
+  proofText: text("proof_text"),
+  txHash: text("tx_hash"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const bountyClaimsRelations = relations(bountyClaims, ({ one }) => ({
+  bounty: one(bounties, {
+    fields: [bountyClaims.bountyId],
+    references: [bounties.id],
+  }),
+  user: one(users, {
+    fields: [bountyClaims.userId],
+    references: [users.id],
+  }),
+}));
+
+// ============= LUMINA MARKETPLACE - PHASE 3: BUY-TO-EARN & REVIEWS =============
+
+export const reviewStatusEnum = pgEnum("review_status", ["pending", "approved", "rejected", "flagged"]);
+
+export const productReviews = pgTable("product_reviews", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull(),
+  orderId: integer("order_id"),
+  reviewerId: varchar("reviewer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(),
+  title: text("title"),
+  content: text("content"),
+  images: text("images").array(),
+  videoUrl: text("video_url"),
+  isVerifiedPurchase: boolean("is_verified_purchase").default(false),
+  isVideoReview: boolean("is_video_review").default(false),
+  status: reviewStatusEnum("status").default("pending"),
+  helpfulVotes: integer("helpful_votes").default(0),
+  notHelpfulVotes: integer("not_helpful_votes").default(0),
+  reviewerReputationScore: integer("reviewer_reputation_score").default(0),
+  rewardEarned: text("reward_earned").default("0"),
+  rewardTx: text("reward_tx"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const productReviewsRelations = relations(productReviews, ({ one }) => ({
+  product: one(shopProducts, {
+    fields: [productReviews.productId],
+    references: [shopProducts.id],
+  }),
+  order: one(shopOrders, {
+    fields: [productReviews.orderId],
+    references: [shopOrders.id],
+  }),
+  reviewer: one(users, {
+    fields: [productReviews.reviewerId],
+    references: [users.id],
+  }),
+}));
+
+// ============= LUMINA MARKETPLACE - PHASE 4: LIVE SHOPPING =============
+
+export const liveShopSessions = pgTable("live_shop_sessions", {
+  id: serial("id").primaryKey(),
+  streamId: integer("stream_id").notNull(),
+  shopId: integer("shop_id").notNull(),
+  hostId: integer("host_id").notNull(),
+  title: text("title"),
+  description: text("description"),
+  thumbnailUrl: text("thumbnail_url"),
+  status: text("status").default("scheduled"),
+  viewerCount: integer("viewer_count").default(0),
+  peakViewers: integer("peak_viewers").default(0),
+  totalSales: text("total_sales").default("0"),
+  orderCount: integer("order_count").default(0),
+  scheduledAt: timestamp("scheduled_at"),
+  startedAt: timestamp("started_at"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const liveShopSessionsRelations = relations(liveShopSessions, ({ one, many }) => ({
+  stream: one(liveStreams, {
+    fields: [liveShopSessions.streamId],
+    references: [liveStreams.id],
+  }),
+  shop: one(shops, {
+    fields: [liveShopSessions.shopId],
+    references: [shops.id],
+  }),
+  host: one(users, {
+    fields: [liveShopSessions.hostId],
+    references: [users.id],
+  }),
+  featuredProducts: many(liveProductFeatures),
+}));
+
+export const liveProductFeatures = pgTable("live_product_features", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull(),
+  productId: integer("product_id").notNull(),
+  orderPosition: integer("order_position").default(0),
+  discountPercent: integer("discount_percent").default(0),
+  limitedQuantity: integer("limited_quantity"),
+  soldCount: integer("sold_count").default(0),
+  isFlashSale: boolean("is_flash_sale").default(false),
+  flashSaleEnds: timestamp("flash_sale_ends"),
+  isActive: boolean("is_active").default(true),
+  featuredAt: timestamp("featured_at").defaultNow(),
+});
+
+export const liveProductFeaturesRelations = relations(liveProductFeatures, ({ one }) => ({
+  session: one(liveShopSessions, {
+    fields: [liveProductFeatures.sessionId],
+    references: [liveShopSessions.id],
+  }),
+  product: one(shopProducts, {
+    fields: [liveProductFeatures.productId],
+    references: [shopProducts.id],
+  }),
+}));
+
+// ============= LUMINA MARKETPLACE - PHASE 5: DISPUTES & ARBITRATION =============
+
+export const disputeStatusEnum = pgEnum("dispute_status", ["open", "evidence", "voting", "resolved", "appealed", "closed"]);
+export const disputeResolutionEnum = pgEnum("dispute_resolution", ["refund", "partial_refund", "no_refund", "replacement"]);
+
+export const disputes = pgTable("disputes", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().unique(),
+  shopId: integer("shop_id").notNull(),
+  buyerId: varchar("buyer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sellerId: varchar("seller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  disputeType: text("dispute_type").notNull(),
+  reason: text("reason").notNull(),
+  description: text("description"),
+  evidenceUrls: text("evidence_urls").array(),
+  amountDisputed: text("amount_disputed").notNull(),
+  status: disputeStatusEnum("status").default("open"),
+  resolution: disputeResolutionEnum("resolution"),
+  arbitrators: integer("arbitrators").array(),
+  votesForBuyer: integer("votes_for_buyer").default(0),
+  votesForSeller: integer("votes_for_seller").default(0),
+  buyerRefund: text("buyer_refund"),
+  sellerPayout: text("seller_payout"),
+  resolutionTx: text("resolution_tx"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const disputesRelations = relations(disputes, ({ one }) => ({
+  order: one(shopOrders, {
+    fields: [disputes.orderId],
+    references: [shopOrders.id],
+  }),
+  shop: one(shops, {
+    fields: [disputes.shopId],
+    references: [shops.id],
+  }),
+  buyer: one(users, {
+    fields: [disputes.buyerId],
+    references: [users.id],
+    relationName: "disputeBuyer",
+  }),
+  seller: one(users, {
+    fields: [disputes.sellerId],
+    references: [users.id],
+    relationName: "disputeSeller",
+  }),
+}));
+
+export const disputeEvidence = pgTable("dispute_evidence", {
+  id: serial("id").primaryKey(),
+  disputeId: integer("dispute_id").notNull(),
+  submittedBy: varchar("submitted_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  evidenceType: text("evidence_type").notNull(),
+  content: text("content"),
+  fileUrl: text("file_url"),
+  ipfsHash: text("ipfs_hash"),
+  verified: boolean("verified").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const disputeEvidenceRelations = relations(disputeEvidence, ({ one }) => ({
+  dispute: one(disputes, {
+    fields: [disputeEvidence.disputeId],
+    references: [disputes.id],
+  }),
+  submitter: one(users, {
+    fields: [disputeEvidence.submittedBy],
+    references: [users.id],
+  }),
+}));
+
+export const arbitrators = pgTable("arbitrators", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique(),
+  stakingAmount: text("staking_amount").notNull(),
+  stakingTx: text("staking_tx"),
+  isActive: boolean("is_active").default(true),
+  casesResolved: integer("cases_resolved").default(0),
+  accuracyScore: text("accuracy_score").default("100"),
+  reputationTier: integer("reputation_tier").default(1),
+  slashingCount: integer("slashing_count").default(0),
+  totalRewards: text("total_rewards").default("0"),
+  lastCaseAt: timestamp("last_case_at"),
+  suspendedUntil: timestamp("suspended_until"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const arbitratorsRelations = relations(arbitrators, ({ one, many }) => ({
+  user: one(users, {
+    fields: [arbitrators.userId],
+    references: [users.id],
+  }),
+  votes: many(arbitratorVotes),
+}));
+
+export const arbitratorVotes = pgTable("arbitrator_votes", {
+  id: serial("id").primaryKey(),
+  disputeId: integer("dispute_id").notNull(),
+  arbitratorId: integer("arbitrator_id").notNull(),
+  vote: text("vote").notNull(),
+  reasoning: text("reasoning"),
+  stakedAmount: text("staked_amount"),
+  rewardEarned: text("reward_earned"),
+  slashed: boolean("slashed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const arbitratorVotesRelations = relations(arbitratorVotes, ({ one }) => ({
+  dispute: one(disputes, {
+    fields: [arbitratorVotes.disputeId],
+    references: [disputes.id],
+  }),
+  arbitrator: one(arbitrators, {
+    fields: [arbitratorVotes.arbitratorId],
+    references: [arbitrators.id],
+  }),
+}));
+
+export const productProvenance = pgTable("product_provenance", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull(),
+  eventType: text("event_type").notNull(),
+  fromAddress: text("from_address"),
+  toAddress: text("to_address"),
+  txHash: text("tx_hash"),
+  blockNumber: integer("block_number"),
+  eventData: jsonb("event_data"),
+  ipfsHash: text("ipfs_hash"),
+  verified: boolean("verified").default(false),
+  verifierSignature: text("verifier_signature"),
+  previousEventId: integer("previous_event_id"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const productProvenanceRelations = relations(productProvenance, ({ one }) => ({
+  product: one(shopProducts, {
+    fields: [productProvenance.productId],
+    references: [shopProducts.id],
+  }),
+  previousEvent: one(productProvenance, {
+    fields: [productProvenance.previousEventId],
+    references: [productProvenance.id],
+  }),
+}));
+
+// ============= MARKETPLACE INSERT SCHEMAS & TYPES =============
+
+export const insertShopSchema = createInsertSchema(shops).omit({
+  id: true,
+  totalSales: true,
+  totalRevenue: true,
+  totalProducts: true,
+  rating: true,
+  reviewCount: true,
+  featuredAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertShopProductSchema = createInsertSchema(shopProducts).omit({
+  id: true,
+  totalSales: true,
+  totalRevenue: true,
+  viewCount: true,
+  rating: true,
+  reviewCount: true,
+  featuredAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertShopOrderSchema = createInsertSchema(shopOrders).omit({
+  id: true,
+  orderNumber: true,
+  paymentConfirmedAt: true,
+  cashbackTxHash: true,
+  paidAt: true,
+  shippedAt: true,
+  deliveredAt: true,
+  cancelledAt: true,
+  refundedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertShopOrderItemSchema = createInsertSchema(shopOrderItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertShopPayoutSchema = createInsertSchema(shopPayouts).omit({
+  id: true,
+  processedAt: true,
+  createdAt: true,
+});
+
+export const insertAffiliateProgramSchema = createInsertSchema(affiliatePrograms).omit({
+  id: true,
+  totalAffiliates: true,
+  totalPayouts: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAffiliateLinkSchema = createInsertSchema(affiliateLinks).omit({
+  id: true,
+  clicks: true,
+  conversions: true,
+  earnings: true,
+  revenue: true,
+  lastUsedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBountySchema = createInsertSchema(bounties).omit({
+  id: true,
+  claimedCount: true,
+  createdAt: true,
+});
+
+export const insertProductReviewSchema = createInsertSchema(productReviews).omit({
+  id: true,
+  helpfulVotes: true,
+  notHelpfulVotes: true,
+  reviewerReputationScore: true,
+  rewardEarned: true,
+  rewardTx: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDisputeSchema = createInsertSchema(disputes).omit({
+  id: true,
+  resolution: true,
+  arbitrators: true,
+  votesForBuyer: true,
+  votesForSeller: true,
+  buyerRefund: true,
+  sellerPayout: true,
+  resolutionTx: true,
+  resolvedAt: true,
+  createdAt: true,
+});
+
+export const insertArbitratorSchema = createInsertSchema(arbitrators).omit({
+  id: true,
+  casesResolved: true,
+  accuracyScore: true,
+  reputationTier: true,
+  slashingCount: true,
+  totalRewards: true,
+  lastCaseAt: true,
+  suspendedUntil: true,
+  createdAt: true,
+});
+
+// ============= MARKETPLACE TYPES =============
+
+export type InsertShop = z.infer<typeof insertShopSchema>;
+export type Shop = typeof shops.$inferSelect;
+export type InsertShopProduct = z.infer<typeof insertShopProductSchema>;
+export type ShopProduct = typeof shopProducts.$inferSelect;
+export type InsertShopOrder = z.infer<typeof insertShopOrderSchema>;
+export type ShopOrder = typeof shopOrders.$inferSelect;
+export type InsertShopOrderItem = z.infer<typeof insertShopOrderItemSchema>;
+export type ShopOrderItem = typeof shopOrderItems.$inferSelect;
+export type InsertShopPayout = z.infer<typeof insertShopPayoutSchema>;
+export type ShopPayout = typeof shopPayouts.$inferSelect;
+export type InsertAffiliateProgram = z.infer<typeof insertAffiliateProgramSchema>;
+export type AffiliateProgram = typeof affiliatePrograms.$inferSelect;
+export type InsertAffiliateLink = z.infer<typeof insertAffiliateLinkSchema>;
+export type AffiliateLink = typeof affiliateLinks.$inferSelect;
+export type InsertBounty = z.infer<typeof insertBountySchema>;
+export type Bounty = typeof bounties.$inferSelect;
+export type InsertProductReview = z.infer<typeof insertProductReviewSchema>;
+export type ProductReview = typeof productReviews.$inferSelect;
+export type InsertDispute = z.infer<typeof insertDisputeSchema>;
+export type Dispute = typeof disputes.$inferSelect;
+export type InsertArbitrator = z.infer<typeof insertArbitratorSchema>;
+export type Arbitrator = typeof arbitrators.$inferSelect;
+
+// Extended marketplace types
+export interface ShopWithOwner extends Shop {
+  owner: User;
+}
+
+export interface ShopProductWithShop extends ShopProduct {
+  shop: ShopWithOwner;
+}
+
+export interface ShopOrderWithDetails extends ShopOrder {
+  shop: Shop;
+  buyer: User;
+  items: (ShopOrderItem & { product: ShopProduct })[];
+  affiliateLink?: AffiliateLink | null;
+}
+
+export interface ProductReviewWithReviewer extends ProductReview {
+  reviewer: User;
+  product: ShopProduct;
+}
+
+export interface DisputeWithParties extends Dispute {
+  order: ShopOrder;
+  initiator: User;
+  respondent: User;
+  evidence: (typeof disputeEvidence.$inferSelect)[];
+}
+
+export interface ArbitratorWithUser extends Arbitrator {
+  user: User;
+}
+
+export interface AffiliateLinkWithDetails extends AffiliateLink {
+  creator: User;
+  program: AffiliateProgram & { shop: Shop };
+  product?: ShopProduct | null;
+}
+
+export interface BountyWithDetails extends Bounty {
+  program: AffiliateProgram & { shop: Shop };
+  product?: ShopProduct | null;
+  claims: (typeof bountyClaims.$inferSelect & { creator: User })[];
 }

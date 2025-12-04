@@ -66,6 +66,25 @@ import {
   canvassingTurfs,
   canvassingContacts,
   recruiterStats,
+  shops,
+  shopProducts,
+  shopOrders,
+  shopOrderItems,
+  shopPayouts,
+  affiliatePrograms,
+  affiliateLinks,
+  affiliateEarnings,
+  bounties,
+  bountyClaims,
+  productReviews,
+  purchaseRewards,
+  liveShopSessions,
+  liveProductFeatures,
+  disputes,
+  disputeEvidence,
+  arbitrators,
+  arbitratorVotes,
+  productProvenance,
   type User,
   type InsertUser,
   type Post,
@@ -223,6 +242,36 @@ import {
   type PhoneBankingListWithStats,
   type CanvassingTurfWithStats,
   type UserWithEngagement,
+  type Shop,
+  type InsertShop,
+  type ShopProduct,
+  type InsertShopProduct,
+  type ShopOrder,
+  type InsertShopOrder,
+  type ShopOrderItem,
+  type InsertShopOrderItem,
+  type ShopPayout,
+  type InsertShopPayout,
+  type AffiliateProgram,
+  type InsertAffiliateProgram,
+  type AffiliateLink,
+  type InsertAffiliateLink,
+  type Bounty,
+  type InsertBounty,
+  type ProductReview,
+  type InsertProductReview,
+  type Dispute,
+  type InsertDispute,
+  type Arbitrator,
+  type InsertArbitrator,
+  type ShopWithOwner,
+  type ShopProductWithShop,
+  type ShopOrderWithDetails,
+  type ProductReviewWithReviewer,
+  type DisputeWithParties,
+  type ArbitratorWithUser,
+  type AffiliateLinkWithDetails,
+  type BountyWithDetails,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, sql, inArray, ilike } from "drizzle-orm";
@@ -407,6 +456,55 @@ export interface IStorage {
   createEmailCampaign(campaign: InsertEmailCampaign): Promise<EmailCampaign>;
   updateEmailCampaign(id: string, updates: Partial<EmailCampaign>): Promise<EmailCampaign | undefined>;
   deleteEmailCampaign(id: string): Promise<void>;
+
+  // ============= LUMINA MARKETPLACE =============
+  
+  // Shops (number IDs for entity PKs, string IDs for user FKs)
+  getShops(options?: { category?: string; status?: string; search?: string; limit?: number }): Promise<ShopWithOwner[]>;
+  getShop(id: number): Promise<ShopWithOwner | undefined>;
+  getShopBySlug(slug: string): Promise<ShopWithOwner | undefined>;
+  getShopByOwner(ownerId: string): Promise<ShopWithOwner | undefined>;
+  createShop(shop: InsertShop): Promise<Shop>;
+  updateShop(id: number, updates: Partial<Shop>): Promise<Shop | undefined>;
+  
+  // Shop Products
+  getShopProducts(options?: { shopId?: number; category?: string; status?: string; search?: string; limit?: number; featured?: boolean }): Promise<ShopProductWithShop[]>;
+  getShopProduct(id: number): Promise<ShopProductWithShop | undefined>;
+  getShopProductBySlug(shopId: number, slug: string): Promise<ShopProductWithShop | undefined>;
+  createShopProduct(product: InsertShopProduct): Promise<ShopProduct>;
+  updateShopProduct(id: number, updates: Partial<ShopProduct>): Promise<ShopProduct | undefined>;
+  deleteShopProduct(id: number): Promise<void>;
+  
+  // Shop Orders (string for buyerId since it references users.id UUID)
+  getShopOrders(options?: { shopId?: number; buyerId?: string; status?: string; limit?: number }): Promise<ShopOrderWithDetails[]>;
+  getShopOrder(id: number): Promise<ShopOrderWithDetails | undefined>;
+  getShopOrderByNumber(orderNumber: string): Promise<ShopOrderWithDetails | undefined>;
+  createShopOrder(order: InsertShopOrder, items: Omit<InsertShopOrderItem, 'orderId'>[]): Promise<ShopOrder>;
+  updateShopOrder(id: number, updates: Partial<ShopOrder>): Promise<ShopOrder | undefined>;
+  
+  // Product Reviews
+  getProductReviews(productId: number, options?: { limit?: number }): Promise<ProductReviewWithReviewer[]>;
+  createProductReview(review: InsertProductReview): Promise<ProductReview>;
+  updateProductReview(id: number, updates: Partial<ProductReview>): Promise<ProductReview | undefined>;
+  
+  // Affiliate Programs
+  getAffiliateProgram(shopId: number): Promise<AffiliateProgram | undefined>;
+  createAffiliateProgram(program: InsertAffiliateProgram): Promise<AffiliateProgram>;
+  updateAffiliateProgram(id: number, updates: Partial<AffiliateProgram>): Promise<AffiliateProgram | undefined>;
+  
+  // Affiliate Links (string for affiliateUserId since it references users.id UUID)
+  getAffiliateLinks(options?: { affiliateUserId?: string; programId?: number }): Promise<AffiliateLinkWithDetails[]>;
+  getAffiliateLink(id: number): Promise<AffiliateLinkWithDetails | undefined>;
+  getAffiliateLinkByCode(code: string): Promise<AffiliateLinkWithDetails | undefined>;
+  createAffiliateLink(link: InsertAffiliateLink): Promise<AffiliateLink>;
+  updateAffiliateLink(id: number, updates: Partial<AffiliateLink>): Promise<AffiliateLink | undefined>;
+  recordAffiliateClick(linkId: number): Promise<void>;
+  
+  // Bounties
+  getBounties(options?: { programId?: number; shopId?: number; status?: string }): Promise<BountyWithDetails[]>;
+  getBounty(id: number): Promise<BountyWithDetails | undefined>;
+  createBounty(bounty: InsertBounty): Promise<Bounty>;
+  updateBounty(id: number, updates: Partial<Bounty>): Promise<Bounty | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3615,6 +3713,698 @@ export class DatabaseStorage implements IStorage {
       monthlyRecruits: (stats?.monthlyRecruits || 0) + 1,
       lastRecruitAt: new Date(),
     });
+  }
+
+  // ============= LUMINA MARKETPLACE =============
+
+  async getShops(options?: { category?: string; status?: string; search?: string; limit?: number }): Promise<ShopWithOwner[]> {
+    const limit = options?.limit || 50;
+    
+    let query = db
+      .select({
+        shop: shops,
+        owner: users,
+      })
+      .from(shops)
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .orderBy(desc(shops.createdAt))
+      .limit(limit);
+    
+    const conditions: any[] = [];
+    if (options?.category && options.category !== 'all') {
+      conditions.push(eq(shops.category, options.category as any));
+    }
+    if (options?.status) {
+      conditions.push(eq(shops.status, options.status as any));
+    }
+    if (options?.search) {
+      conditions.push(ilike(shops.name, `%${options.search}%`));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const results = await query;
+    return results.map((row) => ({
+      ...row.shop,
+      owner: sanitizeUser(row.owner) as any,
+    }));
+  }
+
+  async getShop(id: number): Promise<ShopWithOwner | undefined> {
+    const [result] = await db
+      .select({
+        shop: shops,
+        owner: users,
+      })
+      .from(shops)
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .where(eq(shops.id, id));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.shop,
+      owner: sanitizeUser(result.owner) as any,
+    };
+  }
+
+  async getShopBySlug(slug: string): Promise<ShopWithOwner | undefined> {
+    const [result] = await db
+      .select({
+        shop: shops,
+        owner: users,
+      })
+      .from(shops)
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .where(eq(shops.slug, slug));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.shop,
+      owner: sanitizeUser(result.owner) as any,
+    };
+  }
+
+  async getShopByOwner(ownerId: string): Promise<ShopWithOwner | undefined> {
+    const [result] = await db
+      .select({
+        shop: shops,
+        owner: users,
+      })
+      .from(shops)
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .where(eq(shops.ownerId, ownerId));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.shop,
+      owner: sanitizeUser(result.owner) as any,
+    };
+  }
+
+  async createShop(shop: InsertShop): Promise<Shop> {
+    const [created] = await db.insert(shops).values(shop as any).returning();
+    return created;
+  }
+
+  async updateShop(id: number, updates: Partial<Shop>): Promise<Shop | undefined> {
+    const [updated] = await db.update(shops).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(shops.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getShopProducts(options?: { shopId?: number; category?: string; status?: string; search?: string; limit?: number; featured?: boolean }): Promise<ShopProductWithShop[]> {
+    const limit = options?.limit || 50;
+    
+    const results = await db
+      .select({
+        product: shopProducts,
+        shop: shops,
+        owner: users,
+      })
+      .from(shopProducts)
+      .innerJoin(shops, eq(shopProducts.shopId, shops.id))
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .orderBy(desc(shopProducts.createdAt))
+      .limit(limit);
+    
+    let filtered = results;
+    
+    if (options?.shopId) {
+      filtered = filtered.filter(r => r.product.shopId === options.shopId);
+    }
+    if (options?.category && options.category !== 'all') {
+      filtered = filtered.filter(r => r.product.category === options.category);
+    }
+    if (options?.status) {
+      filtered = filtered.filter(r => r.product.status === options.status);
+    }
+    if (options?.featured) {
+      filtered = filtered.filter(r => r.product.isFeatured);
+    }
+    if (options?.search) {
+      const searchLower = options.search.toLowerCase();
+      filtered = filtered.filter(r => 
+        r.product.title.toLowerCase().includes(searchLower) ||
+        r.product.description?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    return filtered.map((row) => ({
+      ...row.product,
+      shop: {
+        ...row.shop,
+        owner: sanitizeUser(row.owner) as any,
+      },
+    }));
+  }
+
+  async getShopProduct(id: number): Promise<ShopProductWithShop | undefined> {
+    const [result] = await db
+      .select({
+        product: shopProducts,
+        shop: shops,
+        owner: users,
+      })
+      .from(shopProducts)
+      .innerJoin(shops, eq(shopProducts.shopId, shops.id))
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .where(eq(shopProducts.id, id));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.product,
+      shop: {
+        ...result.shop,
+        owner: sanitizeUser(result.owner) as any,
+      },
+    };
+  }
+
+  async getShopProductBySlug(shopId: number, slug: string): Promise<ShopProductWithShop | undefined> {
+    const [result] = await db
+      .select({
+        product: shopProducts,
+        shop: shops,
+        owner: users,
+      })
+      .from(shopProducts)
+      .innerJoin(shops, eq(shopProducts.shopId, shops.id))
+      .innerJoin(users, eq(shops.ownerId, users.id))
+      .where(and(eq(shopProducts.shopId, shopId), eq(shopProducts.slug, slug)));
+    
+    if (!result) return undefined;
+    
+    return {
+      ...result.product,
+      shop: {
+        ...result.shop,
+        owner: sanitizeUser(result.owner) as any,
+      },
+    };
+  }
+
+  async createShopProduct(product: InsertShopProduct): Promise<ShopProduct> {
+    const [created] = await db.insert(shopProducts).values(product as any).returning();
+    await db.update(shops).set({
+      totalProducts: sql`${shops.totalProducts} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(shops.id, product.shopId));
+    return created;
+  }
+
+  async updateShopProduct(id: number, updates: Partial<ShopProduct>): Promise<ShopProduct | undefined> {
+    const [updated] = await db.update(shopProducts).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(shopProducts.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteShopProduct(id: number): Promise<void> {
+    const [product] = await db.select().from(shopProducts).where(eq(shopProducts.id, id));
+    if (product) {
+      await db.delete(shopProducts).where(eq(shopProducts.id, id));
+      await db.update(shops).set({
+        totalProducts: sql`GREATEST(0, ${shops.totalProducts} - 1)`,
+        updatedAt: new Date(),
+      }).where(eq(shops.id, product.shopId));
+    }
+  }
+
+  async getShopOrders(options?: { shopId?: number; buyerId?: string; status?: string; limit?: number }): Promise<ShopOrderWithDetails[]> {
+    const limit = options?.limit || 50;
+    
+    const conditions: any[] = [];
+    if (options?.shopId) {
+      conditions.push(eq(shopOrders.shopId, options.shopId));
+    }
+    if (options?.buyerId) {
+      conditions.push(eq(shopOrders.buyerId, options.buyerId));
+    }
+    if (options?.status) {
+      conditions.push(eq(shopOrders.status, options.status as any));
+    }
+    
+    let query = db
+      .select({
+        order: shopOrders,
+        shop: shops,
+        buyer: users,
+      })
+      .from(shopOrders)
+      .innerJoin(shops, eq(shopOrders.shopId, shops.id))
+      .innerJoin(users, eq(shopOrders.buyerId, users.id))
+      .orderBy(desc(shopOrders.createdAt))
+      .limit(limit);
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const results = await query;
+    
+    const ordersWithDetails: ShopOrderWithDetails[] = [];
+    for (const row of results) {
+      const items = await db
+        .select({
+          item: shopOrderItems,
+          product: shopProducts,
+        })
+        .from(shopOrderItems)
+        .innerJoin(shopProducts, eq(shopOrderItems.productId, shopProducts.id))
+        .where(eq(shopOrderItems.orderId, row.order.id));
+      
+      ordersWithDetails.push({
+        ...row.order,
+        shop: row.shop,
+        buyer: sanitizeUser(row.buyer) as any,
+        items: items.map(i => ({
+          ...i.item,
+          product: i.product,
+        })),
+      });
+    }
+    
+    return ordersWithDetails;
+  }
+
+  async getShopOrder(id: number): Promise<ShopOrderWithDetails | undefined> {
+    const [result] = await db
+      .select({
+        order: shopOrders,
+        shop: shops,
+        buyer: users,
+      })
+      .from(shopOrders)
+      .innerJoin(shops, eq(shopOrders.shopId, shops.id))
+      .innerJoin(users, eq(shopOrders.buyerId, users.id))
+      .where(eq(shopOrders.id, id));
+    
+    if (!result) return undefined;
+    
+    const items = await db
+      .select({
+        item: shopOrderItems,
+        product: shopProducts,
+      })
+      .from(shopOrderItems)
+      .innerJoin(shopProducts, eq(shopOrderItems.productId, shopProducts.id))
+      .where(eq(shopOrderItems.orderId, id));
+    
+    return {
+      ...result.order,
+      shop: result.shop,
+      buyer: sanitizeUser(result.buyer) as any,
+      items: items.map(i => ({
+        ...i.item,
+        product: i.product,
+      })),
+    };
+  }
+
+  async getShopOrderByNumber(orderNumber: string): Promise<ShopOrderWithDetails | undefined> {
+    const [result] = await db
+      .select({
+        order: shopOrders,
+        shop: shops,
+        buyer: users,
+      })
+      .from(shopOrders)
+      .innerJoin(shops, eq(shopOrders.shopId, shops.id))
+      .innerJoin(users, eq(shopOrders.buyerId, users.id))
+      .where(eq(shopOrders.orderNumber, orderNumber));
+    
+    if (!result) return undefined;
+    
+    const items = await db
+      .select({
+        item: shopOrderItems,
+        product: shopProducts,
+      })
+      .from(shopOrderItems)
+      .innerJoin(shopProducts, eq(shopOrderItems.productId, shopProducts.id))
+      .where(eq(shopOrderItems.orderId, result.order.id));
+    
+    return {
+      ...result.order,
+      shop: result.shop,
+      buyer: sanitizeUser(result.buyer) as any,
+      items: items.map(i => ({
+        ...i.item,
+        product: i.product,
+      })),
+    };
+  }
+
+  async createShopOrder(order: InsertShopOrder, items: InsertShopOrderItem[]): Promise<ShopOrder> {
+    const orderNumber = `LM-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    
+    const [created] = await db.insert(shopOrders).values({
+      ...order,
+      orderNumber,
+    } as any).returning();
+    
+    for (const item of items) {
+      await db.insert(shopOrderItems).values({
+        ...item,
+        orderId: created.id,
+      } as any);
+    }
+    
+    await db.update(shops).set({
+      totalSales: sql`${shops.totalSales} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(shops.id, order.shopId));
+    
+    return created;
+  }
+
+  async updateShopOrder(id: number, updates: Partial<ShopOrder>): Promise<ShopOrder | undefined> {
+    const [updated] = await db.update(shopOrders).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(shopOrders.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getProductReviews(productId: number, options?: { limit?: number }): Promise<ProductReviewWithReviewer[]> {
+    const limit = options?.limit || 50;
+    
+    const results = await db
+      .select({
+        review: productReviews,
+        reviewer: users,
+        product: shopProducts,
+      })
+      .from(productReviews)
+      .innerJoin(users, eq(productReviews.reviewerId, users.id))
+      .innerJoin(shopProducts, eq(productReviews.productId, shopProducts.id))
+      .where(eq(productReviews.productId, productId))
+      .orderBy(desc(productReviews.createdAt))
+      .limit(limit);
+    
+    return results.map((row) => ({
+      ...row.review,
+      reviewer: sanitizeUser(row.reviewer) as any,
+      product: row.product,
+    }));
+  }
+
+  async createProductReview(review: InsertProductReview): Promise<ProductReview> {
+    const [created] = await db.insert(productReviews).values(review as any).returning();
+    
+    await db.update(shopProducts).set({
+      reviewCount: sql`${shopProducts.reviewCount} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(shopProducts.id, review.productId));
+    
+    return created;
+  }
+
+  async updateProductReview(id: number, updates: Partial<ProductReview>): Promise<ProductReview | undefined> {
+    const [updated] = await db.update(productReviews).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(productReviews.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getAffiliateProgram(shopId: number): Promise<AffiliateProgram | undefined> {
+    const [program] = await db.select().from(affiliatePrograms).where(eq(affiliatePrograms.shopId, shopId));
+    return program || undefined;
+  }
+
+  async createAffiliateProgram(program: InsertAffiliateProgram): Promise<AffiliateProgram> {
+    const [created] = await db.insert(affiliatePrograms).values(program as any).returning();
+    return created;
+  }
+
+  async updateAffiliateProgram(id: number, updates: Partial<AffiliateProgram>): Promise<AffiliateProgram | undefined> {
+    const [updated] = await db.update(affiliatePrograms).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(affiliatePrograms.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getAffiliateLinks(options?: { affiliateUserId?: string; programId?: number }): Promise<AffiliateLinkWithDetails[]> {
+    const conditions: any[] = [];
+    if (options?.affiliateUserId) {
+      conditions.push(eq(affiliateLinks.affiliateUserId, options.affiliateUserId));
+    }
+    if (options?.programId) {
+      conditions.push(eq(affiliateLinks.programId, options.programId));
+    }
+    
+    let query = db
+      .select({
+        link: affiliateLinks,
+        creator: users,
+        program: affiliatePrograms,
+        shop: shops,
+      })
+      .from(affiliateLinks)
+      .innerJoin(users, eq(affiliateLinks.creatorId, users.id))
+      .innerJoin(affiliatePrograms, eq(affiliateLinks.programId, affiliatePrograms.id))
+      .innerJoin(shops, eq(affiliatePrograms.shopId, shops.id))
+      .orderBy(desc(affiliateLinks.createdAt));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const results = await query;
+    
+    const linksWithDetails: AffiliateLinkWithDetails[] = [];
+    for (const row of results) {
+      let product = null;
+      if (row.link.productId) {
+        const [prod] = await db.select().from(shopProducts).where(eq(shopProducts.id, row.link.productId));
+        product = prod || null;
+      }
+      
+      linksWithDetails.push({
+        ...row.link,
+        creator: sanitizeUser(row.creator) as any,
+        program: {
+          ...row.program,
+          shop: row.shop,
+        },
+        product,
+      });
+    }
+    
+    return linksWithDetails;
+  }
+
+  async getAffiliateLink(id: number): Promise<AffiliateLinkWithDetails | undefined> {
+    const [result] = await db
+      .select({
+        link: affiliateLinks,
+        creator: users,
+        program: affiliatePrograms,
+        shop: shops,
+      })
+      .from(affiliateLinks)
+      .innerJoin(users, eq(affiliateLinks.creatorId, users.id))
+      .innerJoin(affiliatePrograms, eq(affiliateLinks.programId, affiliatePrograms.id))
+      .innerJoin(shops, eq(affiliatePrograms.shopId, shops.id))
+      .where(eq(affiliateLinks.id, id));
+    
+    if (!result) return undefined;
+    
+    let product = null;
+    if (result.link.productId) {
+      const [prod] = await db.select().from(shopProducts).where(eq(shopProducts.id, result.link.productId));
+      product = prod || null;
+    }
+    
+    return {
+      ...result.link,
+      creator: sanitizeUser(result.creator) as any,
+      program: {
+        ...result.program,
+        shop: result.shop,
+      },
+      product,
+    };
+  }
+
+  async getAffiliateLinkByCode(code: string): Promise<AffiliateLinkWithDetails | undefined> {
+    const [result] = await db
+      .select({
+        link: affiliateLinks,
+        creator: users,
+        program: affiliatePrograms,
+        shop: shops,
+      })
+      .from(affiliateLinks)
+      .innerJoin(users, eq(affiliateLinks.creatorId, users.id))
+      .innerJoin(affiliatePrograms, eq(affiliateLinks.programId, affiliatePrograms.id))
+      .innerJoin(shops, eq(affiliatePrograms.shopId, shops.id))
+      .where(eq(affiliateLinks.code, code));
+    
+    if (!result) return undefined;
+    
+    let product = null;
+    if (result.link.productId) {
+      const [prod] = await db.select().from(shopProducts).where(eq(shopProducts.id, result.link.productId));
+      product = prod || null;
+    }
+    
+    return {
+      ...result.link,
+      creator: sanitizeUser(result.creator) as any,
+      program: {
+        ...result.program,
+        shop: result.shop,
+      },
+      product,
+    };
+  }
+
+  async createAffiliateLink(link: InsertAffiliateLink): Promise<AffiliateLink> {
+    const [created] = await db.insert(affiliateLinks).values(link as any).returning();
+    await db.update(affiliatePrograms).set({
+      totalAffiliates: sql`${affiliatePrograms.totalAffiliates} + 1`,
+      updatedAt: new Date(),
+    }).where(eq(affiliatePrograms.id, link.programId));
+    return created;
+  }
+
+  async updateAffiliateLink(id: number, updates: Partial<AffiliateLink>): Promise<AffiliateLink | undefined> {
+    const [updated] = await db.update(affiliateLinks).set(updates).where(eq(affiliateLinks.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async recordAffiliateClick(linkId: number): Promise<void> {
+    await db.update(affiliateLinks).set({
+      totalClicks: sql`${affiliateLinks.totalClicks} + 1`,
+    }).where(eq(affiliateLinks.id, linkId));
+  }
+
+  async getBounties(options?: { programId?: number; shopId?: number; status?: string }): Promise<BountyWithDetails[]> {
+    const conditions: any[] = [];
+    if (options?.programId) {
+      conditions.push(eq(bounties.programId, options.programId));
+    }
+    if (options?.shopId) {
+      conditions.push(eq(affiliatePrograms.shopId, options.shopId));
+    }
+    if (options?.status) {
+      conditions.push(eq(bounties.status, options.status as any));
+    }
+    
+    let query = db
+      .select({
+        bounty: bounties,
+        program: affiliatePrograms,
+        shop: shops,
+      })
+      .from(bounties)
+      .innerJoin(affiliatePrograms, eq(bounties.programId, affiliatePrograms.id))
+      .innerJoin(shops, eq(affiliatePrograms.shopId, shops.id))
+      .orderBy(desc(bounties.createdAt));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const results = await query;
+    
+    const bountiesWithDetails: BountyWithDetails[] = [];
+    for (const row of results) {
+      let product = null;
+      if (row.bounty.productId) {
+        const [prod] = await db.select().from(shopProducts).where(eq(shopProducts.id, row.bounty.productId));
+        product = prod || null;
+      }
+      
+      const claims = await db
+        .select({
+          claim: bountyClaims,
+          creator: users,
+        })
+        .from(bountyClaims)
+        .innerJoin(users, eq(bountyClaims.creatorId, users.id))
+        .where(eq(bountyClaims.bountyId, row.bounty.id));
+      
+      bountiesWithDetails.push({
+        ...row.bounty,
+        program: {
+          ...row.program,
+          shop: row.shop,
+        },
+        product,
+        claims: claims.map(c => ({
+          ...c.claim,
+          creator: sanitizeUser(c.creator) as any,
+        })),
+      });
+    }
+    
+    return bountiesWithDetails;
+  }
+
+  async getBounty(id: number): Promise<BountyWithDetails | undefined> {
+    const [result] = await db
+      .select({
+        bounty: bounties,
+        program: affiliatePrograms,
+        shop: shops,
+      })
+      .from(bounties)
+      .innerJoin(affiliatePrograms, eq(bounties.programId, affiliatePrograms.id))
+      .innerJoin(shops, eq(affiliatePrograms.shopId, shops.id))
+      .where(eq(bounties.id, id));
+    
+    if (!result) return undefined;
+    
+    let product = null;
+    if (result.bounty.productId) {
+      const [prod] = await db.select().from(shopProducts).where(eq(shopProducts.id, result.bounty.productId));
+      product = prod || null;
+    }
+    
+    const claims = await db
+      .select({
+        claim: bountyClaims,
+        creator: users,
+      })
+      .from(bountyClaims)
+      .innerJoin(users, eq(bountyClaims.creatorId, users.id))
+      .where(eq(bountyClaims.bountyId, id));
+    
+    return {
+      ...result.bounty,
+      program: {
+        ...result.program,
+        shop: result.shop,
+      },
+      product,
+      claims: claims.map(c => ({
+        ...c.claim,
+        creator: sanitizeUser(c.creator) as any,
+      })),
+    };
+  }
+
+  async createBounty(bounty: InsertBounty): Promise<Bounty> {
+    const [created] = await db.insert(bounties).values(bounty as any).returning();
+    return created;
+  }
+
+  async updateBounty(id: number, updates: Partial<Bounty>): Promise<Bounty | undefined> {
+    const [updated] = await db.update(bounties).set(updates).where(eq(bounties.id, id)).returning();
+    return updated || undefined;
   }
 }
 

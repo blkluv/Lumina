@@ -4489,7 +4489,7 @@ export async function registerRoutes(app: Express): Promise<void> {
               // Create reward event for tip receiver
               await storage.createRewardEvent({
                 userId: toUserId,
-                eventType: "received_tip",
+                eventType: "tip_received",
                 points: Math.floor(amount / 10), // 1 point per 10 cents
                 metadata: { fromUserId, amount },
               });
@@ -6299,6 +6299,639 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error) {
       console.error("Delete promotion error:", error);
       res.status(500).json({ error: "Failed to delete promotion" });
+    }
+  });
+
+  // ============= LUMINA MARKETPLACE ROUTES =============
+
+  // Shops
+  app.get("/api/marketplace/shops", async (req, res) => {
+    try {
+      const { category, status, search, limit } = req.query;
+      const shops = await storage.getShops({
+        category: category as string,
+        status: status as string || 'active',
+        search: search as string,
+        limit: limit ? parseInt(limit as string) : undefined,
+      });
+      res.json(shops);
+    } catch (error) {
+      console.error("Get shops error:", error);
+      res.status(500).json({ error: "Failed to get shops" });
+    }
+  });
+
+  app.get("/api/marketplace/shops/:id", async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.id, 10);
+      if (isNaN(shopId)) {
+        return res.status(400).json({ error: "Invalid shop ID" });
+      }
+      const shop = await storage.getShop(shopId);
+      if (!shop) {
+        return res.status(404).json({ error: "Shop not found" });
+      }
+      res.json(shop);
+    } catch (error) {
+      console.error("Get shop error:", error);
+      res.status(500).json({ error: "Failed to get shop" });
+    }
+  });
+
+  app.get("/api/marketplace/shops/slug/:slug", async (req, res) => {
+    try {
+      const shop = await storage.getShopBySlug(req.params.slug);
+      if (!shop) {
+        return res.status(404).json({ error: "Shop not found" });
+      }
+      res.json(shop);
+    } catch (error) {
+      console.error("Get shop by slug error:", error);
+      res.status(500).json({ error: "Failed to get shop" });
+    }
+  });
+
+  app.get("/api/marketplace/my-shop", requireAuth, async (req, res) => {
+    try {
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      res.json(shop || null);
+    } catch (error) {
+      console.error("Get my shop error:", error);
+      res.status(500).json({ error: "Failed to get shop" });
+    }
+  });
+
+  app.post("/api/marketplace/shops", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const existingShop = await storage.getShopByOwner(req.session.userId!);
+      if (existingShop) {
+        return res.status(400).json({ error: "You already have a shop" });
+      }
+
+      const { name, description, category, walletAddress, contactEmail } = req.body;
+      
+      const slug = name.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        + '-' + Math.random().toString(36).substring(2, 6);
+
+      const shop = await storage.createShop({
+        ownerId: req.session.userId!,
+        name: sanitizeText(name),
+        slug,
+        description: sanitizeText(description),
+        category: category || 'other',
+        walletAddress,
+        contactEmail,
+        status: 'active',
+      });
+
+      res.status(201).json(shop);
+    } catch (error) {
+      console.error("Create shop error:", error);
+      res.status(500).json({ error: "Failed to create shop" });
+    }
+  });
+
+  app.patch("/api/marketplace/shops/:id", requireAuth, async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.id, 10);
+      if (isNaN(shopId)) {
+        return res.status(400).json({ error: "Invalid shop ID" });
+      }
+      const shop = await storage.getShop(shopId);
+      if (!shop) {
+        return res.status(404).json({ error: "Shop not found" });
+      }
+      if (shop.ownerId !== req.session.userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const updates = {
+        name: req.body.name ? sanitizeText(req.body.name) : undefined,
+        description: req.body.description ? sanitizeText(req.body.description) : undefined,
+        logoUrl: req.body.logoUrl,
+        bannerUrl: req.body.bannerUrl,
+        category: req.body.category,
+        walletAddress: req.body.walletAddress,
+        contactEmail: req.body.contactEmail,
+        contactPhone: req.body.contactPhone,
+        website: req.body.website,
+        socialLinks: req.body.socialLinks,
+        policies: req.body.policies,
+        shippingInfo: req.body.shippingInfo,
+      };
+
+      const updated = await storage.updateShop(shopId, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update shop error:", error);
+      res.status(500).json({ error: "Failed to update shop" });
+    }
+  });
+
+  // Shop Products
+  app.get("/api/marketplace/products", async (req, res) => {
+    try {
+      const { shopId, category, status, search, limit, featured } = req.query;
+      const products = await storage.getShopProducts({
+        shopId: shopId ? parseInt(shopId as string, 10) : undefined,
+        category: category as string,
+        status: status as string || 'active',
+        search: search as string,
+        limit: limit ? parseInt(limit as string) : undefined,
+        featured: featured === 'true',
+      });
+      res.json(products);
+    } catch (error) {
+      console.error("Get products error:", error);
+      res.status(500).json({ error: "Failed to get products" });
+    }
+  });
+
+  app.get("/api/marketplace/products/:id", async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ error: "Invalid product ID" });
+      }
+      const product = await storage.getShopProduct(productId);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      
+      await storage.updateShopProduct(productId, {
+        viewCount: (product.viewCount || 0) + 1,
+      });
+      
+      res.json(product);
+    } catch (error) {
+      console.error("Get product error:", error);
+      res.status(500).json({ error: "Failed to get product" });
+    }
+  });
+
+  app.post("/api/marketplace/products", requireAuth, async (req, res) => {
+    try {
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      if (!shop) {
+        return res.status(403).json({ error: "You need a shop to create products" });
+      }
+
+      const { title, description, shortDescription, priceAxm, category, productType, mediaUrls, thumbnailUrl, inventory, isDigital, requiresShipping, tags } = req.body;
+      
+      const slug = title.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        + '-' + Math.random().toString(36).substring(2, 6);
+
+      const product = await storage.createShopProduct({
+        shopId: shop.id,
+        title: sanitizeText(title),
+        slug,
+        description: sanitizeText(description),
+        shortDescription: sanitizeText(shortDescription),
+        priceAxm,
+        category: category || 'other',
+        productType: productType || 'one_time',
+        mediaUrls,
+        thumbnailUrl,
+        inventory,
+        isDigital: isDigital || false,
+        requiresShipping: requiresShipping !== false,
+        tags,
+        status: 'active',
+      });
+
+      res.status(201).json(product);
+    } catch (error) {
+      console.error("Create product error:", error);
+      res.status(500).json({ error: "Failed to create product" });
+    }
+  });
+
+  app.patch("/api/marketplace/products/:id", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ error: "Invalid product ID" });
+      }
+      const product = await storage.getShopProduct(productId);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      if (!shop || shop.id !== product.shopId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const updates = {
+        title: req.body.title ? sanitizeText(req.body.title) : undefined,
+        description: req.body.description ? sanitizeText(req.body.description) : undefined,
+        shortDescription: req.body.shortDescription ? sanitizeText(req.body.shortDescription) : undefined,
+        priceAxm: req.body.priceAxm,
+        compareAtPriceAxm: req.body.compareAtPriceAxm,
+        category: req.body.category,
+        productType: req.body.productType,
+        status: req.body.status,
+        mediaUrls: req.body.mediaUrls,
+        thumbnailUrl: req.body.thumbnailUrl,
+        inventory: req.body.inventory,
+        isDigital: req.body.isDigital,
+        digitalFileUrl: req.body.digitalFileUrl,
+        requiresShipping: req.body.requiresShipping,
+        tags: req.body.tags,
+        isFeatured: req.body.isFeatured,
+        affiliateCommissionBps: req.body.affiliateCommissionBps,
+      };
+
+      const updated = await storage.updateShopProduct(productId, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update product error:", error);
+      res.status(500).json({ error: "Failed to update product" });
+    }
+  });
+
+  app.delete("/api/marketplace/products/:id", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ error: "Invalid product ID" });
+      }
+      const product = await storage.getShopProduct(productId);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+      
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      if (!shop || shop.id !== product.shopId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      await storage.deleteShopProduct(productId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete product error:", error);
+      res.status(500).json({ error: "Failed to delete product" });
+    }
+  });
+
+  // Shop Orders
+  app.get("/api/marketplace/orders", requireAuth, async (req, res) => {
+    try {
+      const { shopId, status, limit } = req.query;
+      
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      const parsedShopId = shopId ? parseInt(shopId as string, 10) : undefined;
+      
+      const orders = await storage.getShopOrders({
+        shopId: parsedShopId || shop?.id,
+        buyerId: parsedShopId ? undefined : req.session.userId,
+        status: status as string,
+        limit: limit ? parseInt(limit as string) : undefined,
+      });
+      
+      res.json(orders);
+    } catch (error) {
+      console.error("Get orders error:", error);
+      res.status(500).json({ error: "Failed to get orders" });
+    }
+  });
+
+  app.get("/api/marketplace/orders/my-purchases", requireAuth, async (req, res) => {
+    try {
+      const orders = await storage.getShopOrders({
+        buyerId: req.session.userId!,
+        limit: 50,
+      });
+      res.json(orders);
+    } catch (error) {
+      console.error("Get my purchases error:", error);
+      res.status(500).json({ error: "Failed to get purchases" });
+    }
+  });
+
+  app.get("/api/marketplace/orders/:id", requireAuth, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (isNaN(orderId)) {
+        return res.status(400).json({ error: "Invalid order ID" });
+      }
+      const order = await storage.getShopOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      if (order.buyerId !== req.session.userId && order.shopId !== shop?.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      res.json(order);
+    } catch (error) {
+      console.error("Get order error:", error);
+      res.status(500).json({ error: "Failed to get order" });
+    }
+  });
+
+  app.post("/api/marketplace/orders", requireAuth, async (req, res) => {
+    try {
+      const { shopId, items, shippingAddress, affiliateLinkCode } = req.body;
+      
+      if (!items || items.length === 0) {
+        return res.status(400).json({ error: "Cart is empty" });
+      }
+
+      let subtotal = 0;
+      const orderItems = [];
+      
+      for (const item of items) {
+        const product = await storage.getShopProduct(item.productId);
+        if (!product) {
+          return res.status(400).json({ error: `Product ${item.productId} not found` });
+        }
+        if (product.shopId !== shopId) {
+          return res.status(400).json({ error: "All products must be from the same shop" });
+        }
+        
+        const itemTotal = parseFloat(product.priceAxm) * item.quantity;
+        subtotal += itemTotal;
+        
+        orderItems.push({
+          productId: item.productId,
+          quantity: item.quantity,
+          priceAxm: product.priceAxm,
+          totalAxm: itemTotal.toString(),
+          attributes: item.attributes,
+        });
+      }
+
+      const platformFee = subtotal * 0.02;
+      let affiliateFee = 0;
+      let affiliateLinkId = undefined;
+      
+      if (affiliateLinkCode) {
+        const affiliateLink = await storage.getAffiliateLinkByCode(affiliateLinkCode);
+        if (affiliateLink && affiliateLink.isActive) {
+          const commissionBps = affiliateLink.customCommissionBps || affiliateLink.program.defaultCommissionBps || 1000;
+          affiliateFee = subtotal * (commissionBps / 10000);
+          affiliateLinkId = affiliateLink.id;
+        }
+      }
+
+      const sellerReceives = subtotal - platformFee - affiliateFee;
+
+      const order = await storage.createShopOrder({
+        shopId,
+        buyerId: req.session.userId!,
+        subtotalAxm: subtotal.toString(),
+        platformFeeAxm: platformFee.toString(),
+        affiliateFeeAxm: affiliateFee.toString(),
+        totalAxm: subtotal.toString(),
+        sellerReceivesAxm: sellerReceives.toString(),
+        affiliateLinkId,
+        shippingAddress,
+        status: 'pending',
+      }, orderItems);
+
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Create order error:", error);
+      res.status(500).json({ error: "Failed to create order" });
+    }
+  });
+
+  app.patch("/api/marketplace/orders/:id", requireAuth, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (isNaN(orderId)) {
+        return res.status(400).json({ error: "Invalid order ID" });
+      }
+      const order = await storage.getShopOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      const shop = await storage.getShopByOwner(req.session.userId!);
+      if (order.shopId !== shop?.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const { status, trackingNumber, trackingUrl, shippingMethod, notes } = req.body;
+      
+      const updates: any = { status, trackingNumber, trackingUrl, shippingMethod, notes };
+      
+      if (status === 'shipped' && !order.shippedAt) {
+        updates.shippedAt = new Date();
+      }
+      if (status === 'delivered' && !order.deliveredAt) {
+        updates.deliveredAt = new Date();
+      }
+      if (status === 'cancelled' && !order.cancelledAt) {
+        updates.cancelledAt = new Date();
+      }
+
+      const updated = await storage.updateShopOrder(orderId, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update order error:", error);
+      res.status(500).json({ error: "Failed to update order" });
+    }
+  });
+
+  app.post("/api/marketplace/orders/:id/pay", requireAuth, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (isNaN(orderId)) {
+        return res.status(400).json({ error: "Invalid order ID" });
+      }
+      const order = await storage.getShopOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      if (order.buyerId !== req.session.userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      if (order.status !== 'pending') {
+        return res.status(400).json({ error: "Order already processed" });
+      }
+
+      const { paymentTxHash } = req.body;
+      
+      const updated = await storage.updateShopOrder(orderId, {
+        status: 'paid',
+        paymentTxHash,
+        paymentConfirmedAt: new Date(),
+        paidAt: new Date(),
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Pay order error:", error);
+      res.status(500).json({ error: "Failed to process payment" });
+    }
+  });
+
+  // Product Reviews
+  app.get("/api/marketplace/products/:productId/reviews", async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ error: "Invalid product ID" });
+      }
+      const reviews = await storage.getProductReviews(productId);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Get reviews error:", error);
+      res.status(500).json({ error: "Failed to get reviews" });
+    }
+  });
+
+  app.post("/api/marketplace/products/:productId/reviews", requireAuth, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.productId, 10);
+      if (isNaN(productId)) {
+        return res.status(400).json({ error: "Invalid product ID" });
+      }
+      const product = await storage.getShopProduct(productId);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+
+      const { rating, title, content, mediaUrls, orderId } = req.body;
+      
+      let isVerifiedPurchase = false;
+      if (orderId) {
+        const orderIdNum = parseInt(orderId, 10);
+        if (!isNaN(orderIdNum)) {
+          const order = await storage.getShopOrder(orderIdNum);
+          if (order && order.buyerId === req.session.userId && order.status === 'delivered') {
+            isVerifiedPurchase = true;
+          }
+        }
+      }
+
+      const review = await storage.createProductReview({
+        productId,
+        reviewerId: req.session.userId!,
+        orderId: orderId ? parseInt(orderId, 10) : undefined,
+        rating,
+        title: sanitizeText(title),
+        content: sanitizeText(content),
+        mediaUrls,
+        isVerifiedPurchase,
+        status: 'pending',
+      });
+
+      res.status(201).json(review);
+    } catch (error) {
+      console.error("Create review error:", error);
+      res.status(500).json({ error: "Failed to create review" });
+    }
+  });
+
+  // Affiliate Links
+  app.get("/api/marketplace/affiliates/my-links", requireAuth, async (req, res) => {
+    try {
+      const links = await storage.getAffiliateLinks({ affiliateUserId: req.session.userId! });
+      res.json(links);
+    } catch (error) {
+      console.error("Get affiliate links error:", error);
+      res.status(500).json({ error: "Failed to get affiliate links" });
+    }
+  });
+
+  app.post("/api/marketplace/affiliates/join/:shopId", requireAuth, async (req, res) => {
+    try {
+      const shopId = parseInt(req.params.shopId, 10);
+      if (isNaN(shopId)) {
+        return res.status(400).json({ error: "Invalid shop ID" });
+      }
+      const program = await storage.getAffiliateProgram(shopId);
+      if (!program) {
+        return res.status(404).json({ error: "Affiliate program not found" });
+      }
+      if (!program.isActive) {
+        return res.status(400).json({ error: "Affiliate program is not active" });
+      }
+
+      const existingLinks = await storage.getAffiliateLinks({
+        affiliateUserId: req.session.userId!,
+        programId: program.id,
+      });
+      
+      if (existingLinks.length > 0) {
+        return res.status(400).json({ error: "You're already an affiliate for this shop" });
+      }
+
+      const code = `${req.session.userId!.substring(0, 4)}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+      const link = await storage.createAffiliateLink({
+        programId: program.id,
+        affiliateUserId: req.session.userId!,
+        code,
+        isActive: program.autoApprove,
+      });
+
+      res.status(201).json(link);
+    } catch (error) {
+      console.error("Join affiliate program error:", error);
+      res.status(500).json({ error: "Failed to join affiliate program" });
+    }
+  });
+
+  app.get("/api/marketplace/affiliates/track/:code", async (req, res) => {
+    try {
+      const link = await storage.getAffiliateLinkByCode(req.params.code);
+      if (!link) {
+        return res.status(404).json({ error: "Affiliate link not found" });
+      }
+      
+      await storage.recordAffiliateClick(link.id);
+      
+      res.json({ shopId: link.program.shopId, productId: link.productId });
+    } catch (error) {
+      console.error("Track affiliate click error:", error);
+      res.status(500).json({ error: "Failed to track click" });
+    }
+  });
+
+  // Bounties
+  app.get("/api/marketplace/bounties", async (req, res) => {
+    try {
+      const { programId, status } = req.query;
+      const bounties = await storage.getBounties({
+        programId: programId ? parseInt(programId as string, 10) : undefined,
+        status: status as string || 'open',
+      });
+      res.json(bounties);
+    } catch (error) {
+      console.error("Get bounties error:", error);
+      res.status(500).json({ error: "Failed to get bounties" });
+    }
+  });
+
+  app.get("/api/marketplace/bounties/:id", async (req, res) => {
+    try {
+      const bountyId = parseInt(req.params.id, 10);
+      if (isNaN(bountyId)) {
+        return res.status(400).json({ error: "Invalid bounty ID" });
+      }
+      const bounty = await storage.getBounty(bountyId);
+      if (!bounty) {
+        return res.status(404).json({ error: "Bounty not found" });
+      }
+      res.json(bounty);
+    } catch (error) {
+      console.error("Get bounty error:", error);
+      res.status(500).json({ error: "Failed to get bounty" });
     }
   });
 }

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { X, Home, Play, Users, User, Settings, TrendingUp, Coins, Search, MessageCircle, BarChart3, Trophy, Radio, ShoppingBag, ImageIcon, Vote, Lock, Award, Megaphone, Hand, ClipboardList, Phone, Shield, Building2, Gift, GraduationCap, ArrowDownUp, Server, ArrowLeftRight, FileText, Wallet } from "lucide-react";
+import { X, Home, Play, Users, User, Settings, TrendingUp, Coins, Search, MessageCircle, BarChart3, Trophy, Radio, ShoppingBag, ImageIcon, Vote, Lock, Award, Megaphone, Hand, ClipboardList, Phone, Shield, Building2, Gift, GraduationCap, ArrowDownUp, Server, ArrowLeftRight, FileText, Wallet, Store } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ const web3Items = [
 
 const otherItems = [
   { href: "/shop", label: "Shop", icon: ShoppingBag },
+  { href: "/marketplace", label: "Marketplace", icon: Store },
   { href: "/referrals", label: "Referrals", icon: Gift },
   { href: "/whitepaper", label: "Whitepaper", icon: FileText },
   { href: "/guidelines", label: "Guidelines", icon: Shield },
