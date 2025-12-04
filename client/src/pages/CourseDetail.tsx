@@ -201,8 +201,29 @@ export default function CourseDetail() {
 
   const CategoryIcon = category?.icon || BookOpen;
   const totalLessons = course.lessons.length;
-  const progressPercent = enrollment?.progressPercentage || 0;
-  const completedLessons = Math.floor((progressPercent / 100) * totalLessons);
+  
+  // Get local progress for this course
+  const getLocalProgress = () => {
+    if (!address) return [];
+    const progressKey = `course_progress_${courseId}_${address}`;
+    try {
+      return JSON.parse(localStorage.getItem(progressKey) || '[]');
+    } catch {
+      return [];
+    }
+  };
+  
+  const localProgress = getLocalProgress();
+  const localCompletedCount = localProgress.length;
+  const progressPercent = enrollment?.progressPercentage || (localCompletedCount / totalLessons) * 100;
+  const completedLessons = Math.max(Math.floor((enrollment?.progressPercentage || 0) / 100 * totalLessons), localCompletedCount);
+  
+  // Check if a specific lesson is completed locally
+  const isLessonLocallyCompleted = (lessonId: number) => {
+    if (!address) return false;
+    const completionKey = `lesson_completed_${courseId}_${lessonId}_${address}`;
+    return localStorage.getItem(completionKey) === 'true';
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -404,7 +425,7 @@ export default function CourseDetail() {
           <CardContent className="pb-2">
             <Accordion type="multiple" className="w-full">
               {course.lessons.map((lesson, index) => {
-                const isCompleted = enrollment && index < completedLessons;
+                const isCompleted = (enrollment && index < completedLessons) || isLessonLocallyCompleted(lesson.id);
                 return (
                   <AccordionItem key={lesson.id} value={`lesson-${lesson.id}`}>
                     <AccordionTrigger className="hover:no-underline">

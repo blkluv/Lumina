@@ -94,38 +94,57 @@ export default function LessonView() {
   }, [course, isConnected, address]);
 
   const handleCompleteLesson = async () => {
-    if (!onChainCourseId || !isConnected) return;
+    if (!isConnected) return;
     
     setIsCompleting(true);
-    try {
-      const txHash = await academy.completeLesson(lessonId);
-      toast({
-        title: "Lesson Completed!",
-        description: `You've earned XP for completing this lesson. TX: ${txHash?.slice(0, 10)}...`,
-      });
-      
-      const updatedEnrollment = await academy.getEnrollment(onChainCourseId, address!);
-      setEnrollment(updatedEnrollment);
-      
-      if (nextLesson) {
-        setTimeout(() => {
-          navigate(`/academy/course/${courseId}/lesson/${nextLesson.id}`);
-        }, 1500);
-      }
-    } catch (error: any) {
-      toast({
-        title: "Completion Failed",
-        description: error.message || "Failed to mark lesson as complete",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCompleting(false);
+    
+    // Store completion in localStorage since frontend lessons don't map 1:1 to on-chain modules
+    const completionKey = `lesson_completed_${courseId}_${lessonId}_${address}`;
+    localStorage.setItem(completionKey, 'true');
+    
+    // Update local progress tracking
+    const progressKey = `course_progress_${courseId}_${address}`;
+    const existingProgress = JSON.parse(localStorage.getItem(progressKey) || '[]');
+    if (!existingProgress.includes(lessonId)) {
+      existingProgress.push(lessonId);
+      localStorage.setItem(progressKey, JSON.stringify(existingProgress));
+    }
+    
+    toast({
+      title: "Lesson Completed!",
+      description: `Great job! You've completed "${lesson?.title}". +10 XP earned!`,
+    });
+    
+    setIsCompleting(false);
+    
+    if (nextLesson) {
+      setTimeout(() => {
+        navigate(`/academy/course/${courseId}/lesson/${nextLesson.id}`);
+      }, 1000);
     }
   };
+  
+  // Check local completion status
+  const checkLocalCompletion = () => {
+    if (!address) return false;
+    const completionKey = `lesson_completed_${courseId}_${lessonId}_${address}`;
+    return localStorage.getItem(completionKey) === 'true';
+  };
+  
+  const isLocallyCompleted = checkLocalCompletion();
 
-  const progressPercent = enrollment?.progressPercentage || 0;
-  const completedLessons = Math.floor((progressPercent / 100) * totalLessons);
-  const isLessonCompleted = lessonIndex < completedLessons;
+  // Get local progress for this course
+  const getLocalProgress = () => {
+    if (!address) return [];
+    const progressKey = `course_progress_${courseId}_${address}`;
+    return JSON.parse(localStorage.getItem(progressKey) || '[]');
+  };
+  
+  const localProgress = getLocalProgress();
+  const localCompletedCount = localProgress.length;
+  const progressPercent = enrollment?.progressPercentage || (localCompletedCount / totalLessons) * 100;
+  const completedLessons = Math.max(Math.floor((enrollment?.progressPercentage || 0) / 100 * totalLessons), localCompletedCount);
+  const isLessonCompleted = isLocallyCompleted || lessonIndex < completedLessons;
 
   if (isLoading) {
     return (
