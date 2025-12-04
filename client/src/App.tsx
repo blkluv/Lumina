@@ -48,6 +48,8 @@ import AdminAcademy from "@/pages/AdminAcademy";
 import Exchange from "@/pages/Exchange";
 import Nodes from "@/pages/Nodes";
 import Marketplace from "@/pages/Marketplace";
+import ShopDetail from "@/pages/ShopDetail";
+import ProductDetail from "@/pages/ProductDetail";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -111,6 +113,8 @@ function Router() {
       <Route path="/exchange" component={Exchange} />
       <Route path="/nodes" component={Nodes} />
       <Route path="/marketplace" component={Marketplace} />
+      <Route path="/marketplace/shop/:slug" component={ShopDetail} />
+      <Route path="/marketplace/product/:id" component={ProductDetail} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} />} />
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
