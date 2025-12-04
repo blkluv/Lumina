@@ -635,7 +635,68 @@ You now have the foundation to:
           "The passion-skill-demand framework",
           "Niche vs micro-niche strategies",
           "Competitive analysis techniques"
-        ]
+        ],
+        content: `## Finding Your Perfect Niche
+
+The most successful creators don't try to appeal to everyone. They find a specific niche where they can become the go-to voice.
+
+### The Passion-Skill-Demand Framework
+
+Your ideal niche sits at the intersection of three circles:
+
+**1. Passion**
+What could you talk about for hours? What do you naturally research and explore? Passion fuels consistency—you'll need to create hundreds of pieces of content.
+
+**2. Skill**
+What are you genuinely good at? This could be knowledge, abilities, or unique experiences. Your skill gives you credibility.
+
+**3. Demand**
+Are people actively searching for this content? Is there an audience willing to engage? Demand ensures your efforts pay off.
+
+### Niche vs Micro-Niche
+
+**Broad Niche**: Fitness
+**Niche**: Home workouts
+**Micro-Niche**: 15-minute home workouts for busy moms
+
+The more specific, the:
+- Easier to become the expert
+- More targeted your audience
+- Clearer your content direction
+- But smaller the potential audience
+
+Start micro-niche, expand as you grow.
+
+### Competitive Analysis
+
+Before committing, research your niche:
+
+**Who's already there?**
+- Top 10 creators in your space
+- Their content style and frequency
+- What's working for them
+
+**What gaps exist?**
+- Underserved sub-topics
+- Audiences not being reached
+- Perspectives not represented
+
+**Can you differentiate?**
+- Your unique angle
+- Your specific audience
+- Your distinct style
+
+### The Validation Test
+
+Before fully committing:
+1. Create 10 pieces of content in your niche
+2. Post them and measure engagement
+3. Notice how you feel creating them
+4. Adjust based on response
+
+Your niche can evolve, but start with focus.
+
+🔥 **Action Step**: Fill out the passion-skill-demand framework. List 5 potential niches at their intersection.`
       },
       {
         id: 2,
@@ -646,7 +707,88 @@ You now have the foundation to:
           "Voice and tone development",
           "Authenticity in content creation",
           "Signature phrases and catchphrases"
-        ]
+        ],
+        content: `## Your Voice is Your Superpower
+
+In a sea of content, your unique voice is what makes you memorable. People follow personalities, not just information.
+
+### Understanding Voice vs Tone
+
+**Voice** = Your consistent personality
+- Your humor style
+- Your energy level
+- Your values and beliefs
+- Your vocabulary choices
+
+**Tone** = How you adapt to context
+- Celebratory for wins
+- Empathetic for struggles
+- Educational for tutorials
+- Hype for announcements
+
+Your voice stays consistent; your tone flexes.
+
+### Discovering Your Natural Voice
+
+Don't fabricate a persona—amplify who you already are:
+
+**Record yourself talking naturally**
+- Call a friend about your topic
+- Notice your natural expressions
+- Capture your genuine enthusiasm
+
+**Review your texts and messages**
+- How do you naturally communicate?
+- What phrases do you use often?
+- What's your texting style?
+
+**Ask close friends**
+- "How would you describe my personality?"
+- "What do I say all the time?"
+- "What makes me... me?"
+
+### Voice Characteristics to Define
+
+**Energy Level**: Calm and thoughtful vs. high energy and hype
+**Humor Style**: Dry wit, silly, sarcastic, wholesome
+**Formality**: Professional, casual, street, academic
+**Emotional Range**: Reserved, expressive, vulnerable
+**Perspective**: Optimistic, realistic, contrarian
+
+### Signature Elements
+
+Create memorable moments:
+
+**Catchphrases**
+- Greeting: "What's good, everyone!"
+- Signoff: "Stay curious, stay creative"
+- Reaction: "You know what? That's valid."
+
+**Visual Signatures**
+- Hand gestures
+- Facial expressions
+- Background elements
+
+**Audio Signatures**
+- Intro sounds
+- Transition phrases
+- Music choices
+
+### Authenticity Over Perfection
+
+What resonates:
+- Real reactions
+- Genuine opinions
+- Honest struggles
+- Imperfect moments
+
+What doesn't:
+- Trying too hard
+- Copying other creators
+- Hiding your personality
+- Being what you think people want
+
+🔥 **Action Step**: Record a 2-minute unscripted video talking about your topic. Watch it back and note 5 things that feel uniquely "you."`
       },
       {
         id: 3,
@@ -657,7 +799,94 @@ You now have the foundation to:
           "Color psychology for creators",
           "Thumbnail design principles",
           "Visual consistency across platforms"
-        ]
+        ],
+        content: `## Creating Visual Recognition
+
+When someone scrolls past your content, they should know it's you before reading a word. Visual branding creates instant recognition.
+
+### Color Psychology for Creators
+
+Colors evoke emotions. Choose intentionally:
+
+**Red**: Energy, passion, urgency
+**Orange**: Creativity, enthusiasm, warmth
+**Yellow**: Optimism, clarity, happiness
+**Green**: Growth, health, nature
+**Blue**: Trust, calm, professionalism
+**Purple**: Creativity, luxury, wisdom
+**Pink**: Playful, nurturing, romantic
+**Black**: Sophistication, power, elegance
+
+### Building Your Color Palette
+
+**Primary Color**: Your main brand color (1)
+**Secondary Colors**: Complementary colors (2-3)
+**Accent Color**: For highlights and CTAs (1)
+**Neutral Colors**: For text and backgrounds
+
+Tools to help:
+- Coolors.co for palette generation
+- Adobe Color for combinations
+- Canva's color palette generator
+
+### Thumbnail Design Principles
+
+Thumbnails are billboards. Make them pop:
+
+**The 3-Second Rule**
+- Clear focal point
+- Readable at small sizes
+- Emotional expression
+
+**What Works**:
+- Faces with expressions
+- Bold, contrasting colors
+- Large, readable text (3-5 words max)
+- Consistent frame/template
+
+**What Doesn't**:
+- Cluttered designs
+- Small text
+- Low contrast
+- Inconsistent styles
+
+### Visual Consistency Checklist
+
+**Fonts**
+- Headline font (bold, attention-grabbing)
+- Body font (readable, clean)
+- Stick to 2-3 fonts maximum
+
+**Photo/Video Style**
+- Lighting preference
+- Filter/color grade
+- Framing and composition
+
+**Graphics and Overlays**
+- Icon style
+- Shape preferences
+- Animation style
+
+### Templates Save Time
+
+Create templates for:
+- Thumbnails
+- Stories/Posts
+- Quote graphics
+- Announcement graphics
+
+Use the same layouts, swap the content.
+
+### Brand Board
+
+Create a one-page visual reference:
+- Logo variations
+- Color codes (hex values)
+- Font names and uses
+- Photo/graphic style examples
+- Do's and don'ts
+
+🔥 **Action Step**: Create a simple brand board with your colors, fonts, and style references. Use Canva's free brand kit feature.`
       },
       {
         id: 4,
@@ -668,7 +897,89 @@ You now have the foundation to:
           "Bio writing formulas",
           "Profile picture best practices",
           "Link-in-bio strategies"
-        ]
+        ],
+        content: `## Your Profile is Your Storefront
+
+Every profile visit is a potential follower. Optimize every element for conversion.
+
+### Profile Picture Best Practices
+
+**What Works**:
+- Clear face shot (fill 60% of frame)
+- Good lighting (natural or ring light)
+- Eye contact with camera
+- Genuine expression (smile or character)
+- Brand colors in background/clothing
+
+**What Doesn't**:
+- Group photos (who are you?)
+- Distant shots (can't see you)
+- Heavy filters (looks inauthentic)
+- Logos (unless you're a business)
+- Sunglasses (eyes build connection)
+
+### Bio Writing Formulas
+
+You have limited characters. Make them count.
+
+**Formula 1: What + Who + Why**
+"[What you do] for [who you help] | [What they'll get]"
+Example: "Crypto simplified for beginners | Learn Web3 without the jargon"
+
+**Formula 2: Credibility + Promise**
+"[Your credential] | [What you share]"
+Example: "Ex-TikTok employee | Behind-the-scenes algorithm secrets"
+
+**Formula 3: Personality + Value**
+"[Fun personal fact] | [What you offer]"
+Example: "Coffee addict + code nerd | Daily coding tips that actually work"
+
+### Bio Elements to Include
+
+**Line 1**: What you do / who you are
+**Line 2**: Who you help / what value you provide
+**Line 3**: Credibility or personality
+**Line 4**: Call-to-action
+
+Add relevant emojis for visual breaks (but don't overdo it).
+
+### Link-in-Bio Strategies
+
+One link, multiple destinations:
+
+**Option 1: Simple Landing Page**
+- Linktree, Beacons, or Stan
+- List your key links
+- Feature current promotions
+
+**Option 2: Custom Page**
+- Your own website
+- Email capture
+- Full control
+
+**What to Link**:
+- Latest content/project
+- Email newsletter signup
+- Other platforms
+- Products/services
+- Community/Discord
+
+### Username Strategy
+
+**Consistency**: Same handle everywhere when possible
+**Memorable**: Easy to spell and say
+**Searchable**: Includes your niche keyword if natural
+**Professional**: Avoid numbers/underscores if possible
+
+### Highlights/Pinned Content
+
+First impressions matter:
+- Pin your best-performing content
+- Showcase different content types
+- Include a "Start Here" or intro post
+- Feature testimonials/results
+
+🔥 **Action Step**: Audit your current profile against this checklist. Make 3 immediate improvements.`
       },
       {
         id: 5,
@@ -679,7 +990,99 @@ You now have the foundation to:
           "Defining 3-5 content pillars",
           "Balancing variety and consistency",
           "Content pillar rotation strategies"
-        ]
+        ],
+        content: `## The Content Pillars Framework
+
+Random content confuses your audience. Content pillars give structure while maintaining variety.
+
+### What Are Content Pillars?
+
+Content pillars are 3-5 core themes that all your content falls under. They:
+- Define what you talk about
+- Set audience expectations
+- Make content planning easier
+- Reinforce your expertise
+
+### Choosing Your Pillars
+
+**Step 1: List Everything**
+Write down every topic you could cover in your niche.
+
+**Step 2: Group Themes**
+Cluster similar topics into categories.
+
+**Step 3: Select 3-5 Core Pillars**
+Choose themes that:
+- You can consistently create around
+- Your audience cares about
+- Show your unique perspective
+- Support each other
+
+### Content Pillar Examples
+
+**Fitness Creator**:
+1. Workout tutorials
+2. Nutrition tips
+3. Mindset/motivation
+4. Personal fitness journey
+
+**Crypto Educator**:
+1. Beginner tutorials
+2. Market analysis
+3. Project reviews
+4. Personal portfolio updates
+
+**Business Coach**:
+1. Marketing strategies
+2. Mindset development
+3. Client stories
+4. Behind-the-scenes
+
+### The 3 Content Types Per Pillar
+
+For each pillar, create three types:
+
+**Educational**: Teach something valuable
+**Entertaining**: Make them smile/feel
+**Personal**: Share your journey
+
+This creates 9-15 content categories total.
+
+### Content Pillar Rotation
+
+**Option 1: Daily Rotation**
+Monday: Pillar 1
+Tuesday: Pillar 2
+Wednesday: Pillar 3
+Thursday: Pillar 1
+Friday: Pillar 4
+
+**Option 2: Weighted Rotation**
+Focus 50% on your main pillar
+Distribute 50% among others
+
+**Option 3: Responsive Rotation**
+More of what's performing well
+Less of what isn't resonating
+
+### Pillar Documentation
+
+For each pillar, document:
+- Sub-topics within the pillar
+- Content ideas bank
+- Best-performing examples
+- Hashtags and keywords
+- Visual style notes
+
+### Evolving Your Pillars
+
+Your pillars can change as you grow:
+- Add new pillars gradually
+- Retire pillars that don't resonate
+- Let audience feedback guide you
+- Stay true to your core brand
+
+🔥 **Action Step**: Define your 3-5 content pillars. List 10 content ideas under each pillar.`
       },
       {
         id: 6,
@@ -690,7 +1093,114 @@ You now have the foundation to:
           "Platform-specific adaptations",
           "Cross-promotion strategies",
           "Maintaining core brand elements"
-        ]
+        ],
+        content: `## One Brand, Multiple Platforms
+
+Your brand should be recognizable everywhere while respecting each platform's unique culture.
+
+### Core vs Flexible Elements
+
+**Keep Consistent (Core)**:
+- Your voice and personality
+- Color palette
+- Values and messaging
+- Profile photo
+- Core content themes
+
+**Adapt (Flexible)**:
+- Content format and length
+- Posting frequency
+- Tone and formality
+- Platform-specific features
+- Trending participation
+
+### Platform-Specific Adaptations
+
+**TikTok/Short-Form**:
+- Casual, energetic
+- Trend participation
+- Quick hooks
+- Native sounds
+
+**YouTube**:
+- More polished production
+- Longer, deeper content
+- SEO-optimized titles
+- Thumbnail importance
+
+**Twitter/X**:
+- Concise, witty
+- Conversation-focused
+- Thread potential
+- Real-time engagement
+
+**Instagram**:
+- Visual-first
+- Aesthetic consistency
+- Stories for casual
+- Reels for reach
+
+**LinkedIn**:
+- Professional tone
+- Industry insights
+- Thought leadership
+- Career-related content
+
+### Cross-Promotion Strategies
+
+**Repurposing Content**:
+- Long video → Short clips
+- Blog → Thread → Carousel
+- Podcast → Audiograms
+- Stats → Graphics
+
+**Platform Funneling**:
+- Tease on one platform
+- Full content on another
+- "Link in bio for more"
+- Platform-specific incentives
+
+**Cohesive Campaigns**:
+- Same message, different formats
+- Coordinated launch timing
+- Platform-specific CTAs
+
+### Maintaining Recognition
+
+Even when adapting:
+- Use consistent username
+- Same profile photo
+- Include brand colors
+- Signature phrases
+- Similar bio messaging
+
+### The 80/20 Rule
+
+**80% Platform-Native**:
+Content that feels natural to the platform
+
+**20% Cross-Platform**:
+Repurposed or consistent brand content
+
+### Managing Multiple Platforms
+
+**Start with one**: Master it before expanding
+**Add gradually**: One new platform at a time
+**Prioritize**: Know your main platform
+**Batch create**: Make content for all platforms at once
+**Use tools**: Scheduling, analytics, management
+
+### Platform Priority Matrix
+
+Rank platforms by:
+1. Where your audience is
+2. What format suits your content
+3. Your time investment
+4. Growth potential
+
+Don't be everywhere—be impactful somewhere.
+
+🔥 **Action Step**: Audit your presence across platforms. Ensure profile consistency and plan one piece of repurposed content this week.`
       }
     ]
   },
