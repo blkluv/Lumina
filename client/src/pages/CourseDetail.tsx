@@ -426,18 +426,71 @@ export default function CourseDetail() {
                     </AccordionTrigger>
                     <AccordionContent>
                       <div className="pl-12 space-y-4">
-                        <p className="text-sm text-muted-foreground">{lesson.overview}</p>
-                        <div>
-                          <p className="text-sm font-medium mb-2">Key Takeaways:</p>
-                          <ul className="space-y-1">
-                            {lesson.keyTakeaways.map((takeaway, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                <Star className="h-3 w-3 text-amber-500 mt-1 shrink-0" />
-                                {takeaway}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                        {isEnrolled && lesson.content ? (
+                          <div className="prose prose-sm dark:prose-invert max-w-none">
+                            <div className="bg-muted/30 rounded-lg p-4 mb-4 border">
+                              <p className="text-sm text-muted-foreground italic mb-0">{lesson.overview}</p>
+                            </div>
+                            <div className="lesson-content whitespace-pre-wrap">
+                              {lesson.content.split('\n').map((line, i) => {
+                                if (line.startsWith('## ')) {
+                                  return <h2 key={i} className="text-xl font-bold mt-6 mb-3 text-foreground">{line.replace('## ', '')}</h2>;
+                                } else if (line.startsWith('### ')) {
+                                  return <h3 key={i} className="text-lg font-semibold mt-4 mb-2 text-foreground">{line.replace('### ', '')}</h3>;
+                                } else if (line.startsWith('**') && line.endsWith('**')) {
+                                  return <p key={i} className="font-semibold mt-3 mb-1 text-foreground">{line.replace(/\*\*/g, '')}</p>;
+                                } else if (line.startsWith('- ')) {
+                                  return <li key={i} className="ml-4 text-muted-foreground">{line.replace('- ', '')}</li>;
+                                } else if (line.match(/^\d+\./)) {
+                                  return <li key={i} className="ml-4 text-muted-foreground list-decimal">{line.replace(/^\d+\.\s*/, '')}</li>;
+                                } else if (line.trim() === '') {
+                                  return <br key={i} />;
+                                } else {
+                                  return <p key={i} className="text-muted-foreground my-2">{line}</p>;
+                                }
+                              })}
+                            </div>
+                            <Separator className="my-4" />
+                            <div className="bg-amber-500/10 rounded-lg p-4 border border-amber-500/20">
+                              <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                                <Star className="h-4 w-4 text-amber-500" />
+                                Key Takeaways
+                              </p>
+                              <ul className="space-y-1">
+                                {lesson.keyTakeaways.map((takeaway, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                    <CheckCircle className="h-3 w-3 text-emerald-500 mt-1 shrink-0" />
+                                    {takeaway}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm text-muted-foreground">{lesson.overview}</p>
+                            <div>
+                              <p className="text-sm font-medium mb-2">Key Takeaways:</p>
+                              <ul className="space-y-1">
+                                {lesson.keyTakeaways.map((takeaway, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                    <Star className="h-3 w-3 text-amber-500 mt-1 shrink-0" />
+                                    {takeaway}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            {!isEnrolled && lesson.content && (
+                              <div className="bg-muted/50 rounded-lg p-4 border border-dashed flex items-center gap-3">
+                                <Lock className="h-5 w-5 text-muted-foreground" />
+                                <div>
+                                  <p className="text-sm font-medium">Full Lesson Content Locked</p>
+                                  <p className="text-xs text-muted-foreground">Enroll in this course to access the complete lesson</p>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
                         {isEnrolled && (
                           <Button size="sm" variant={isCompleted ? "secondary" : "default"}>
                             {isCompleted ? (

@@ -6,6 +6,7 @@ export interface Lesson {
   duration: string;
   overview: string;
   keyTakeaways: string[];
+  content?: string; // Full lesson content in markdown format
 }
 
 export interface CourseContent {
@@ -63,7 +64,45 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "The 5 emotional triggers that drive sharing",
           "Pattern recognition in viral content",
           "Understanding the algorithm's preferences"
-        ]
+        ],
+        content: `## What Makes Content Go Viral?
+
+Viral content isn't random luck—it follows predictable patterns. After analyzing thousands of viral videos across platforms, researchers have identified key elements that dramatically increase shareability.
+
+### The 5 Emotional Triggers
+
+**1. Awe & Wonder**
+Content that makes people say "wow" gets shared. This could be an incredible talent, a beautiful scene, or an unexpected twist. Think: amazing transformations, skills showcased, or mind-blowing facts.
+
+**2. Joy & Humor**
+People love to spread happiness. Funny content that makes viewers laugh out loud is among the most shared. The key is relatability—humor that reflects common experiences.
+
+**3. Inspiration & Hope**
+Uplifting stories about overcoming challenges, achieving dreams, or acts of kindness spread quickly. People share to inspire others and associate themselves with positive messages.
+
+**4. Surprise & Curiosity**
+Unexpected twists, reveals, and "wait for it" moments keep viewers engaged and compel them to share. The element of surprise breaks pattern recognition.
+
+**5. Social Currency**
+People share content that makes them look good—informed, trendy, or helpful. Educational content and insider tips spread because sharing elevates the sharer's status.
+
+### Pattern Recognition
+
+Study viral content in your niche:
+- What emotions does it trigger?
+- What's the pacing like?
+- How quickly does it hook you?
+- What makes you want to share it?
+
+### Algorithm Basics
+
+Modern algorithms prioritize:
+- **Watch time**: How long people stay watching
+- **Engagement**: Likes, comments, shares, saves
+- **Retention**: Do people watch to the end?
+- **Replays**: Content people watch multiple times
+
+🔥 **Action Step**: Save 10 viral videos in your niche. Analyze what emotional trigger each one uses.`
       },
       {
         id: 2,
@@ -74,7 +113,68 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "10 hook templates that work every time",
           "Visual vs verbal hooks",
           "Testing and iterating on hooks"
-        ]
+        ],
+        content: `## The 3-Second Rule
+
+You have exactly 3 seconds to capture attention before someone scrolls past. Your hook is the single most important element of your content.
+
+### 10 Hook Templates That Work
+
+**1. The Bold Statement**
+"Nobody talks about this, but..."
+"This changed everything for me..."
+
+**2. The Question Hook**
+"What would you do if...?"
+"Did you know that...?"
+
+**3. The Controversy**
+"Unpopular opinion: ..."
+"I'm going to say what everyone's thinking..."
+
+**4. The Promise**
+"By the end of this video, you'll know..."
+"I'm about to show you exactly how..."
+
+**5. The Story Opener**
+"So this happened yesterday..."
+"I never thought I'd share this, but..."
+
+**6. The Pattern Interrupt**
+Start with an unusual visual or sound
+Break expectations immediately
+
+**7. The Relatability**
+"POV: When you..."
+"Tell me you're a [type] without telling me..."
+
+**8. The Urgency**
+"Stop scrolling if you..."
+"You need to hear this..."
+
+**9. The Social Proof**
+"Millions of people don't know this..."
+"The secret that [experts] don't want you to know..."
+
+**10. The Demonstration**
+Start with the end result
+Show the transformation immediately
+
+### Visual vs Verbal Hooks
+
+**Visual Hooks**: Movement, bright colors, close-ups, unexpected imagery
+**Verbal Hooks**: First words, tone of voice, pacing
+
+The best content uses BOTH simultaneously.
+
+### Testing Your Hooks
+
+- Create 3 different hooks for the same content
+- Post at similar times
+- Measure which gets highest retention
+- Double down on what works
+
+🔥 **Action Step**: Write 5 different hooks for your next piece of content. Test them with friends before posting.`
       },
       {
         id: 3,
@@ -85,7 +185,60 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "The 3-act structure for short content",
           "Creating tension and resolution quickly",
           "Using visual storytelling techniques"
-        ]
+        ],
+        content: `## The Art of Micro-Storytelling
+
+Great stories follow the same structure whether they're 2 hours or 60 seconds. The key is compression—every second must count.
+
+### The 3-Act Structure (Compressed)
+
+**Act 1: Setup (0-10 seconds)**
+- Introduce the character/situation
+- Establish stakes immediately
+- Create curiosity
+
+**Act 2: Conflict (10-45 seconds)**
+- Present the challenge
+- Build tension
+- Show the struggle
+
+**Act 3: Resolution (45-60 seconds)**
+- Payoff the setup
+- Deliver the punchline/lesson
+- End with impact
+
+### Creating Tension Quickly
+
+Tension = the gap between expectation and reality
+
+Ways to create tension:
+- **Time pressure**: "I only had 24 hours..."
+- **Stakes**: "If this didn't work, I'd lose everything..."
+- **Mystery**: "What I found shocked me..."
+- **Conflict**: "They said it couldn't be done..."
+
+### Visual Storytelling Techniques
+
+**Show, Don't Tell**
+Instead of saying "I was nervous," show shaky hands or pacing.
+
+**Use B-Roll**
+Cut between talking and showing the action.
+
+**Facial Expressions**
+Close-ups of genuine reactions create emotional connection.
+
+**Transitions as Story Elements**
+Use cuts, zooms, and transitions to emphasize story beats.
+
+### The Power of Specificity
+
+Generic: "I started a business"
+Specific: "I turned $47 into a six-figure business from my mom's garage"
+
+Details make stories believable and memorable.
+
+🔥 **Action Step**: Take one of your experiences and write it as a 60-second story using the 3-act structure. Time yourself reading it aloud.`
       },
       {
         id: 4,
@@ -96,7 +249,61 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "Mapping emotional journeys",
           "Authenticity vs performance",
           "Building parasocial connections"
-        ]
+        ],
+        content: `## Making People Feel
+
+The content people remember isn't what made them think—it's what made them *feel*. Emotional resonance is your superpower.
+
+### Mapping Emotional Journeys
+
+Every piece of content should take viewers on an emotional journey:
+
+**The Rollercoaster Method**
+1. Start with a relatable low point
+2. Build hope through the middle
+3. Deliver an emotional high at the end
+
+**The Surprise Method**
+1. Set up one expectation
+2. Subvert it completely
+3. Land on an unexpected emotion
+
+### Authenticity vs Performance
+
+**Authenticity Wins**
+- Imperfect moments feel real
+- Vulnerability creates connection
+- Share genuine struggles, not just wins
+
+**The Performance Trap**
+- Overly polished = unrelatable
+- Fake emotions are obvious
+- Trying too hard pushes people away
+
+**Finding the Balance**
+Be intentional about *what* you share, but genuine in *how* you share it.
+
+### Building Parasocial Connections
+
+Parasocial = one-sided relationships where viewers feel they know you
+
+How to build it:
+- **Consistency**: Show up regularly
+- **Intimacy**: Share personal details appropriately
+- **Direct address**: Talk TO your audience, not AT them
+- **Callbacks**: Reference past content and inside jokes
+- **Responsiveness**: Reply to comments, acknowledge your community
+
+### The Mirror Effect
+
+People are drawn to content that reflects their own experiences:
+- "This is SO me"
+- "I thought I was the only one"
+- "Finally someone said it"
+
+Create content that makes people feel seen and understood.
+
+🔥 **Action Step**: Write down 3 genuine struggles you've overcome. These are your most powerful content topics.`
       },
       {
         id: 5,
@@ -107,7 +314,66 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "Lighting with natural light",
           "Smartphone camera settings",
           "Free editing apps and techniques"
-        ]
+        ],
+        content: `## Pro Quality on a Phone Budget
+
+The best camera is the one you have with you. Your smartphone can create professional-quality content when you know how to use it.
+
+### Lighting with Natural Light
+
+**The Golden Hours**
+Best filming times: 1 hour after sunrise, 1 hour before sunset. Soft, warm, flattering light.
+
+**Window Light**
+- Face the window for even lighting
+- 45-degree angle for dimension
+- Avoid direct sunlight (too harsh)
+
+**DIY Diffusion**
+- White sheet over window = soft light
+- White posterboard = bounce light into shadows
+- Ring lights are affordable and effective
+
+### Smartphone Camera Settings
+
+**Lock Your Focus**
+Tap and hold on your subject to lock focus and exposure.
+
+**4K When Possible**
+Higher resolution = more flexibility in editing. Most modern phones support 4K.
+
+**Grid Lines On**
+Use the rule of thirds for better composition.
+
+**Clean Your Lens**
+Seriously—fingerprints ruin more shots than bad lighting.
+
+### Free Editing Apps
+
+**CapCut** (Free)
+- Professional features
+- Auto-captions
+- Effects and transitions
+
+**InShot** (Free)
+- Easy interface
+- Good for quick edits
+- Text and music
+
+**DaVinci Resolve** (Free, Desktop)
+- Hollywood-level color grading
+- Professional audio tools
+- Steeper learning curve but incredibly powerful
+
+### Quick Editing Tips
+
+1. Cut the fluff—if it doesn't add value, remove it
+2. Add captions—85% of videos are watched on mute
+3. Match music to mood and pacing
+4. Use jump cuts to keep energy high
+5. Color correct for consistency
+
+🔥 **Action Step**: Film 30 seconds of content using only natural window light and your phone. Compare it to your previous content.`
       },
       {
         id: 6,
@@ -118,7 +384,64 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "Royalty-free music sources",
           "Recording clean audio",
           "Sound effects timing"
-        ]
+        ],
+        content: `## Audio: The Unsung Hero
+
+Bad audio will make people scroll faster than bad video. Great audio is invisible—you don't notice it because it just *works*.
+
+### Royalty-Free Music Sources
+
+**Free Options:**
+- **YouTube Audio Library**: Huge selection, completely free
+- **Pixabay Music**: Free for commercial use
+- **Uppbeat**: Free tier available
+
+**Trending Sounds:**
+- Use platform's built-in sounds for discoverability
+- Trending audio = algorithm boost
+- Put your own spin on popular sounds
+
+### Recording Clean Audio
+
+**Environment Matters**
+- Small rooms with soft surfaces absorb echo
+- Avoid rooms with hard floors and bare walls
+- Close windows to block traffic noise
+
+**Phone Recording Tips**
+- Get close to the mic (12-18 inches)
+- Record in a closet for surprisingly good sound
+- Use voice memos for audio-only recording
+
+**Affordable Upgrades**
+- Lavalier mics ($20-50) plug into your phone
+- USB mics for desktop content
+- Windscreens for outdoor recording
+
+### Sound Effects That Pop
+
+**Timing is Everything**
+Sound effects should hit on the beat:
+- Whoosh on transitions
+- Pop on text appearing
+- Ding on key points
+
+**Less is More**
+- 2-3 well-placed effects > constant noise
+- Match effect intensity to content energy
+- Preview without sound effects to check if needed
+
+### Audio Mixing Basics
+
+**Volume Levels**
+- Voice: Primary, loudest element
+- Music: 20-30% volume under voice
+- Effects: Match or slightly under music
+
+**The Ducking Technique**
+Lower music automatically when voice starts. Most editing apps have this built in.
+
+🔥 **Action Step**: Rewatch your last 3 videos with headphones. Note where audio could be improved.`
       },
       {
         id: 7,
@@ -129,7 +452,66 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "Batch content creation",
           "Content calendars",
           "Editing efficiency tips"
-        ]
+        ],
+        content: `## Building Your Content Machine
+
+Consistency beats virality. The creators who win are the ones who show up regularly. That requires a sustainable system.
+
+### Batch Content Creation
+
+**The Power of Batching**
+Film multiple videos in one session:
+- Same setup, minimal context switching
+- Get in the creative flow once
+- More content, less effort
+
+**The 10x Rule**
+When you sit down to create, aim for 10 pieces of content:
+- 3 might be great
+- 5 will be good
+- 2 might not work
+- But you have a week's worth of content
+
+### Content Calendars
+
+**Planning Ahead**
+- Map out themes for the month
+- Align with trends and seasons
+- Build series that connect
+
+**Tools That Help**
+- Notion: Free, flexible database
+- Google Sheets: Simple and shareable
+- Trello: Visual kanban boards
+
+**The 3-Bucket System**
+1. **Evergreen**: Content that's always relevant
+2. **Trending**: Riding current waves
+3. **Personal**: Your unique stories
+
+### Editing Efficiency
+
+**Template Everything**
+- Save intro/outro templates
+- Create preset effects you use often
+- Build a library of transitions
+
+**The 80/20 Rule**
+80% of impact comes from 20% of edits:
+- Good hook
+- Clear audio
+- Tight cuts
+- Strong ending
+
+Focus on these before perfecting the rest.
+
+**Outsourcing**
+When to consider help:
+- You're spending more time editing than creating
+- Editing is burning you out
+- You can afford it ($50-200/video)
+
+🔥 **Action Step**: Block 3 hours this week. Film 5 pieces of content in that one session. Edit them throughout the week.`
       },
       {
         id: 8,
@@ -140,7 +522,90 @@ export const COURSE_CONTENT: Record<number, CourseContent> = {
           "Key metrics that matter",
           "A/B testing content",
           "Continuous improvement mindset"
-        ]
+        ],
+        content: `## Data-Driven Content Creation
+
+Your analytics tell a story. Learn to read it and use it to improve.
+
+### Key Metrics That Matter
+
+**1. Retention Rate**
+The most important metric. How long do people watch?
+- 0-3 seconds: Hook effectiveness
+- Middle: Content quality
+- End: Payoff delivery
+
+**2. Engagement Rate**
+(Likes + Comments + Shares + Saves) / Views
+- 5%+ is good
+- 10%+ is excellent
+- Saves indicate high value content
+
+**3. Share Rate**
+Shares are the holy grail:
+- Each share = free distribution
+- High share rate = viral potential
+- Focus on "share-worthy" content
+
+**4. Follower Conversion**
+Views to Followers ratio:
+- Are viewers becoming fans?
+- Which content converts best?
+- Build more of what converts
+
+### A/B Testing Content
+
+**What to Test**
+- Different hooks
+- Thumbnail variations
+- Posting times
+- Content lengths
+- Call-to-actions
+
+**How to Test**
+- Change ONE variable at a time
+- Post at similar times
+- Compare performance after 48 hours
+- Document results
+
+**Reading Results**
+- 10-20% difference = possibly random
+- 30%+ difference = significant signal
+- Repeat tests to confirm
+
+### The Continuous Improvement Loop
+
+**The Weekly Review**
+Every week, answer:
+1. What performed best? Why?
+2. What underperformed? Why?
+3. What will I try next week?
+
+**The Monthly Audit**
+1. Top 3 performing content pieces
+2. Common threads between winners
+3. Trends to double down on
+4. What to stop doing
+
+**Never Stop Learning**
+- Study your competitors
+- Stay updated on platform changes
+- Experiment constantly
+- Share learnings with creator friends
+
+### Congratulations!
+
+You've completed "Content That Connects"!
+
+You now have the foundation to:
+- Create emotionally resonant content
+- Hook viewers in the first 3 seconds
+- Tell compelling stories
+- Produce quality on any budget
+- Build sustainable systems
+- Use data to improve
+
+🔥 **Final Action Step**: Post your first piece of content using everything you've learned. Share it with our community for feedback!`
       }
     ]
   },
