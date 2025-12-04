@@ -44,6 +44,7 @@ export default function CourseDetail() {
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCourseActive, setIsCourseActive] = useState(false);
+  const [onChainCourseId, setOnChainCourseId] = useState<number | null>(null);
 
   useEffect(() => {
     const courseData = getCourseById(courseId);
@@ -55,27 +56,50 @@ export default function CourseDetail() {
 
   useEffect(() => {
     const checkCourseStatus = async () => {
+      if (!course) return;
+      
       try {
-        const onChainCourse = await academy.getCourse(courseId);
-        setIsCourseActive(onChainCourse !== null && onChainCourse.status === 1);
+        // Fetch on-chain courses and find one matching by title
+        const totalCourses = await academy.getTotalCourses();
+        let foundOnChainCourse = null;
+        
+        for (let i = 1; i <= Math.min(totalCourses, 20); i++) {
+          const onChainCourse = await academy.getCourse(i);
+          if (onChainCourse && 
+              onChainCourse.status === 1 && 
+              onChainCourse.title.toLowerCase().trim() === course.title.toLowerCase().trim()) {
+            foundOnChainCourse = onChainCourse;
+            break;
+          }
+        }
+        
+        if (foundOnChainCourse) {
+          setIsCourseActive(true);
+          setOnChainCourseId(foundOnChainCourse.courseId);
+        } else {
+          setIsCourseActive(false);
+          setOnChainCourseId(null);
+        }
       } catch (error) {
+        console.error("Failed to check course status:", error);
         setIsCourseActive(false);
+        setOnChainCourseId(null);
       }
     };
     checkCourseStatus();
-  }, [courseId]);
+  }, [course]);
 
   useEffect(() => {
     const checkEnrollment = async () => {
-      if (!isConnected || !address || !courseId) return;
+      if (!isConnected || !address || !onChainCourseId) return;
       
       try {
         const studentCourses = await academy.getStudentCourses(address);
-        const enrolled = studentCourses.includes(courseId);
+        const enrolled = studentCourses.includes(onChainCourseId);
         setIsEnrolled(enrolled);
         
         if (enrolled) {
-          const enrollmentData = await academy.getEnrollment(courseId, address);
+          const enrollmentData = await academy.getEnrollment(onChainCourseId, address);
           setEnrollment(enrollmentData);
         }
       } catch (error) {
@@ -84,7 +108,7 @@ export default function CourseDetail() {
     };
 
     checkEnrollment();
-  }, [isConnected, address, courseId]);
+  }, [isConnected, address, onChainCourseId]);
 
   const handleEnroll = async () => {
     if (!isConnected) {
@@ -96,9 +120,18 @@ export default function CourseDetail() {
       return;
     }
 
+    if (!onChainCourseId) {
+      toast({
+        title: "Course Not Available",
+        description: "This course is not yet available for enrollment",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsEnrolling(true);
     try {
-      const txHash = await academy.enrollInCourse(courseId);
+      const txHash = await academy.enrollInCourse(onChainCourseId);
       toast({
         title: "Enrollment Successful",
         description: `Welcome to ${course?.title}! Your journey begins. TX: ${txHash?.slice(0, 10)}...`,
