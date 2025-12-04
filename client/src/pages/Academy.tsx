@@ -20,10 +20,18 @@ import {
   TrendingUp,
   Star,
   Lock,
-  Unlock
+  Unlock,
+  ArrowDownUp,
+  Server,
+  Info,
+  Shield,
+  Coins,
+  Target,
+  Sparkles
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/layout/Header";
+import { Web3FeatureNav } from "@/components/Web3FeatureNav";
 import { useWallet } from "@/lib/walletContext";
 import { useAcademyContract, CourseInfo, Enrollment, Certification } from "@/lib/useContracts";
 import { CONTRACT_ADDRESSES, getExplorerUrl } from "@/lib/contracts";
@@ -153,6 +161,9 @@ export default function Academy() {
       <Header />
       
       <main className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Web3 Feature Navigation */}
+        <Web3FeatureNav />
+
         <div className="flex items-center gap-4 mb-8">
           <Link href="/">
             <Button variant="ghost" size="icon" data-testid="button-back">
@@ -179,6 +190,114 @@ export default function Academy() {
             Refresh
           </Button>
         </div>
+
+        {/* Welcome & How It Works Section */}
+        <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Info className="h-6 w-6 text-primary" />
+              </div>
+              <div className="space-y-4 flex-1">
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">Welcome to Axiom Academy</h2>
+                  <p className="text-muted-foreground">
+                    Axiom Academy is a decentralized learning platform where you can master blockchain technology, 
+                    Web3 development, and cryptocurrency fundamentals. All your progress and certifications are 
+                    recorded on the Arbitrum blockchain, creating verifiable proof of your achievements.
+                  </p>
+                </div>
+                
+                <div className="grid md:grid-cols-3 gap-4 mt-4">
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Target className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Learn & Progress</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Enroll in courses covering DeFi, smart contracts, NFTs, and more. Track your progress on-chain.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Award className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Earn NFT Certificates</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Complete courses to receive NFT certifications that prove your expertise to employers.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Coins className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Earn AXM Rewards</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Top performers can earn AXM token rewards for completing courses and achieving certifications.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Getting Started Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Getting Started
+            </CardTitle>
+            <CardDescription>
+              Follow these steps to begin your learning journey
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h4 className="font-medium">What You Need</h4>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    A Web3 wallet (MetaMask recommended) connected to Arbitrum One
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    A small amount of ETH on Arbitrum for gas fees (typically less than $0.10 per transaction)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    Time and dedication to complete course materials
+                  </li>
+                </ul>
+              </div>
+              <div className="space-y-4">
+                <h4 className="font-medium">How Enrollment Works</h4>
+                <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+                  <li>Browse available courses in the "Courses" tab below</li>
+                  <li>Click "Enroll Now" on a course that interests you</li>
+                  <li>Confirm the transaction in your wallet (small gas fee applies)</li>
+                  <li>Start learning and complete lessons to track progress</li>
+                  <li>Upon completion, receive your NFT certification automatically</li>
+                </ol>
+              </div>
+            </div>
+            
+            <div className="mt-6 p-4 rounded-lg bg-muted/50 flex items-start gap-3">
+              <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
+              <div>
+                <h4 className="font-medium text-sm">Important Notes</h4>
+                <ul className="text-xs text-muted-foreground mt-1 space-y-1">
+                  <li>All enrollments and certifications are recorded on-chain and cannot be faked or removed</li>
+                  <li>Course completion typically takes 2-8 hours depending on the course level</li>
+                  <li>NFT certificates are minted to your wallet upon successful course completion</li>
+                  <li>Gas fees on Arbitrum are very low (usually less than $0.10)</li>
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card className="hover-elevate" data-testid="card-total-courses">

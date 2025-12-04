@@ -28,10 +28,19 @@ import {
   Wallet,
   Lock,
   Activity,
-  BarChart3
+  BarChart3,
+  GraduationCap,
+  Server,
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  Sparkles,
+  HelpCircle,
+  Coins
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/layout/Header";
+import { Web3FeatureNav } from "@/components/Web3FeatureNav";
 import { useWallet } from "@/lib/walletContext";
 import { useExchangeContract, useTokenContract, PoolInfo } from "@/lib/useContracts";
 import { CONTRACT_ADDRESSES, getExplorerUrl, formatTokenAmount, parseTokenAmount } from "@/lib/contracts";
@@ -147,6 +156,9 @@ export default function Exchange() {
       <Header />
       
       <main className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Web3 Feature Navigation */}
+        <Web3FeatureNav />
+
         <div className="flex items-center gap-4 mb-8">
           <Link href="/">
             <Button variant="ghost" size="icon" data-testid="button-back">
@@ -172,6 +184,142 @@ export default function Exchange() {
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+        </div>
+
+        {/* Welcome & How It Works Section */}
+        <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Info className="h-6 w-6 text-primary" />
+              </div>
+              <div className="space-y-4 flex-1">
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">Welcome to Axiom Exchange</h2>
+                  <p className="text-muted-foreground">
+                    Axiom Exchange is a decentralized exchange (DEX) built on Arbitrum One that allows you to swap tokens 
+                    directly from your wallet without intermediaries. You can also provide liquidity to earn trading fees 
+                    from other users' swaps. All trades are executed on-chain with full transparency.
+                  </p>
+                </div>
+                
+                <div className="grid md:grid-cols-3 gap-4 mt-4">
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <ArrowDownUp className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Instant Swaps</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Swap between ETH, AXM, and other supported tokens instantly with low fees on Arbitrum.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Droplets className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Provide Liquidity</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Add tokens to liquidity pools and earn a share of the {feePercentage}% trading fee from every swap.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Shield className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Non-Custodial</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Your funds stay in your wallet. Trade directly without trusting a centralized exchange.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Getting Started & Risks Section */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Getting Started
+              </CardTitle>
+              <CardDescription>
+                What you need to start trading
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Connect your Web3 wallet to Arbitrum One network
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Hold ETH on Arbitrum for gas fees (typically less than $0.05)
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Have tokens you want to swap in your wallet
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  Set appropriate slippage tolerance for your trade
+                </li>
+              </ul>
+              
+              <div className="mt-4 p-3 rounded-lg bg-muted/50">
+                <h4 className="font-medium text-sm flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4" />
+                  What is Slippage?
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Slippage is the difference between expected and actual trade price. Set higher slippage 
+                  (1-3%) for volatile tokens, and lower (0.1-0.5%) for stable pairs.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                Important Risks & Considerations
+              </CardTitle>
+              <CardDescription>
+                Understand before you trade
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <span>Token prices can fluctuate rapidly. Always verify the exchange rate before confirming.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <span>Liquidity providers face impermanent loss risk when token prices change significantly.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <span>Swaps may fail if slippage is set too low or liquidity is insufficient.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <span>Always double-check token addresses to avoid fake tokens with similar names.</span>
+                </li>
+              </ul>
+              
+              <div className="mt-4 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Trading Fee:</strong> {feePercentage}% per swap goes to liquidity providers. 
+                  Gas fees on Arbitrum are separate and typically very low.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">

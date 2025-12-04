@@ -31,10 +31,20 @@ import {
   TrendingUp,
   DollarSign,
   Coins,
-  Shield
+  Shield,
+  GraduationCap,
+  ArrowDownUp,
+  Info,
+  AlertTriangle,
+  Sparkles,
+  HelpCircle,
+  Clock,
+  Globe,
+  Network
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/layout/Header";
+import { Web3FeatureNav } from "@/components/Web3FeatureNav";
 import { useWallet } from "@/lib/walletContext";
 import { useDePINContract, useTokenContract, usePriceOracle, NodeTier, NodePurchase } from "@/lib/useContracts";
 import { CONTRACT_ADDRESSES, getExplorerUrl } from "@/lib/contracts";
@@ -160,6 +170,9 @@ export default function Nodes() {
       <Header />
       
       <main className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Web3 Feature Navigation */}
+        <Web3FeatureNav />
+
         <div className="flex items-center gap-4 mb-8">
           <Link href="/">
             <Button variant="ghost" size="icon" data-testid="button-back">
@@ -185,6 +198,150 @@ export default function Nodes() {
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+        </div>
+
+        {/* Welcome & What is DePIN Section */}
+        <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Info className="h-6 w-6 text-primary" />
+              </div>
+              <div className="space-y-4 flex-1">
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">Welcome to DePIN Node Sales</h2>
+                  <p className="text-muted-foreground">
+                    DePIN (Decentralized Physical Infrastructure Networks) allows you to participate in building decentralized 
+                    infrastructure by purchasing and operating nodes. These nodes contribute to a distributed network that 
+                    provides services like storage, computing, and connectivity. Node owners earn rewards for their contribution.
+                  </p>
+                </div>
+                
+                <div className="grid md:grid-cols-3 gap-4 mt-4">
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Network className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Own Infrastructure</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Purchase nodes to become part of a decentralized network that powers Web3 applications.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Coins className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">Earn Passive Rewards</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Node operators receive ongoing rewards based on their contribution to network uptime and services.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50">
+                    <Tag className="h-5 w-5 text-green-500 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-sm">{discountPercent}% AXM Discount</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Pay with AXM tokens and save {discountPercent}% on your node purchase compared to ETH pricing.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Getting Started & Important Info Section */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                How to Purchase
+              </CardTitle>
+              <CardDescription>
+                Step-by-step guide to buying your node
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ol className="space-y-3 text-sm text-muted-foreground list-decimal list-inside">
+                <li className="flex items-start gap-2">
+                  <span className="font-medium text-foreground">1.</span>
+                  <span>Connect your Web3 wallet to Arbitrum One network</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-medium text-foreground">2.</span>
+                  <span>Choose a node tier based on your budget and desired rewards</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-medium text-foreground">3.</span>
+                  <span>Select payment method: ETH or AXM (with {discountPercent}% discount)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-medium text-foreground">4.</span>
+                  <span>Confirm the transaction in your wallet</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-medium text-foreground">5.</span>
+                  <span>Your node is registered on-chain and begins earning rewards</span>
+                </li>
+              </ol>
+              
+              <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                <h4 className="font-medium text-sm flex items-center gap-2 text-green-600">
+                  <Tag className="h-4 w-4" />
+                  Save with AXM
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Paying with AXM tokens gives you a {discountPercent}% discount on any node tier. 
+                  This is a great way to use your AXM rewards from other platform activities!
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                Important Considerations
+              </CardTitle>
+              <CardDescription>
+                What you should know before purchasing
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <HelpCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <span>Node rewards depend on network activity and are not guaranteed amounts.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <span>Higher tier nodes typically generate more rewards but require larger upfront investment.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <DollarSign className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <span>ETH prices fluctuate. USD value shown is an estimate based on current market price.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <span>Node purchases are recorded on-chain and are non-refundable once confirmed.</span>
+                </li>
+              </ul>
+              
+              <div className="mt-4 p-3 rounded-lg bg-muted/50 flex items-start gap-2">
+                <Shield className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="font-medium text-sm">On-Chain Ownership</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Your node ownership is recorded on the blockchain, providing transparent and 
+                    verifiable proof of purchase that cannot be altered or removed.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
