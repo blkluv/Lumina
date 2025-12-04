@@ -256,10 +256,12 @@ export default function CourseDetail() {
                   </div>
                   <Progress value={progressPercent} className="h-2" />
                 </div>
-                <Button size="lg" data-testid="button-continue">
-                  <Play className="h-5 w-5 mr-2" />
-                  Continue Learning
-                </Button>
+                <Link href={`/academy/course/${courseId}/lesson/${course.lessons[Math.min(completedLessons, totalLessons - 1)].id}`}>
+                  <Button size="lg" data-testid="button-continue">
+                    <Play className="h-5 w-5 mr-2" />
+                    {completedLessons >= totalLessons ? 'Review Course' : 'Continue Learning'}
+                  </Button>
+                </Link>
               </div>
             ) : isCourseActive ? (
               <Button 
@@ -492,19 +494,21 @@ export default function CourseDetail() {
                           </>
                         )}
                         {isEnrolled && (
-                          <Button size="sm" variant={isCompleted ? "secondary" : "default"}>
-                            {isCompleted ? (
-                              <>
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Review Lesson
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-4 w-4 mr-2" />
-                                Start Lesson
-                              </>
-                            )}
-                          </Button>
+                          <Link href={`/academy/course/${courseId}/lesson/${lesson.id}`}>
+                            <Button size="sm" variant={isCompleted ? "secondary" : "default"} data-testid={`button-lesson-${lesson.id}`}>
+                              {isCompleted ? (
+                                <>
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Review Lesson
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4 mr-2" />
+                                  Start Lesson
+                                </>
+                              )}
+                            </Button>
+                          </Link>
                         )}
                       </div>
                     </AccordionContent>
