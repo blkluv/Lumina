@@ -12,6 +12,27 @@ const upload = multer({
   limits: {
     fileSize: 500 * 1024 * 1024, // 500MB
   },
+  fileFilter: (_req, file, cb) => {
+    // Only allow video and image MIME types
+    const allowedTypes = [
+      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Only video and image files are allowed.`));
+    }
+  },
+});
+
+// Rate limiter for upload proxy (stricter to prevent abuse)
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 uploads per minute
+  message: { error: "Too many uploads, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 import { notificationHub, generateWsToken } from "./websocket";
 import { sendBulkEmail, emailTemplates, sendEmail } from "./services/email";
@@ -1151,7 +1172,22 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Proxy upload endpoint - uploads through server to avoid browser CORS/timeout issues
-  app.post("/api/objects/upload-proxy", requireAuth, upload.single("file"), async (req, res) => {
+  // Uses rate limiting and auth to prevent abuse
+  app.post("/api/objects/upload-proxy", requireAuth, uploadLimiter, (req, res, next) => {
+    // Handle multer errors (file type validation, size limits)
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: "File too large. Maximum size is 500MB." });
+          }
+          return res.status(400).json({ error: err.message });
+        }
+        return res.status(415).json({ error: err.message });
+      }
+      next();
+    });
+  }, async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file provided" });
