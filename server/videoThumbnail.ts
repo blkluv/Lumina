@@ -20,17 +20,9 @@ interface FrameExtractionResult {
   }>;
 }
 
-function parseObjectPath(objectPath: string): { bucketName: string; objectName: string } {
-  const parts = objectPath.replace(/^\/objects\//, "").split("/");
-  const bucketName = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || "";
-  const objectName = `${process.env.PRIVATE_OBJECT_DIR}/${parts.join("/")}`;
-  return { bucketName, objectName };
-}
-
 async function downloadVideoToTemp(videoPath: string): Promise<string> {
-  const { bucketName, objectName } = parseObjectPath(videoPath);
-  const bucket = objectStorageClient.bucket(bucketName);
-  const file = bucket.file(objectName);
+  // Use the ObjectStorageService method to get the file properly
+  const file = await objectStorageService.getObjectEntityFile(videoPath);
   
   const tempDir = os.tmpdir();
   const tempFile = path.join(tempDir, `video_${randomUUID()}.mp4`);
