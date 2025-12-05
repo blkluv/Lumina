@@ -8,13 +8,11 @@ import {
   Copy, 
   Check, 
   FileText, 
-  ArrowLeft, 
   Sparkles,
   Shield,
   Coins,
   Users,
   Vote,
-  Lock,
   Zap,
   Globe,
   Heart,
@@ -25,9 +23,13 @@ import {
   Layers,
   Database,
   Bot,
-  Scale,
   Rocket,
-  ExternalLink
+  ExternalLink,
+  ShoppingBag,
+  GraduationCap,
+  ArrowLeftRight,
+  Video,
+  Star
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/layout/Header";
@@ -37,6 +39,9 @@ const sections = [
   { id: "overview", label: "Overview", icon: Sparkles },
   { id: "vision", label: "Vision", icon: Target },
   { id: "features", label: "Features", icon: Layers },
+  { id: "marketplace", label: "Marketplace", icon: ShoppingBag },
+  { id: "academy", label: "Academy", icon: GraduationCap },
+  { id: "exchange", label: "Exchange", icon: ArrowLeftRight },
   { id: "tokenomics", label: "Tokenomics", icon: Coins },
   { id: "contracts", label: "Contracts", icon: Database },
   { id: "moderation", label: "Moderation", icon: Shield },
@@ -46,7 +51,7 @@ const sections = [
 
 const FULL_WHITEPAPER = `================================================================================
                               LUMINA WHITEPAPER
-                              Version 1.0 | December 2025
+                              Version 2.0 | December 2025
           A Web3 Social Media Platform Dedicated to Uplifting Humanity
 ================================================================================
 
@@ -58,13 +63,16 @@ TABLE OF CONTENTS
 4.  The Solution: Lumina
 5.  Platform Architecture
 6.  Core Features
-7.  Token Economics (AXM)
-8.  Smart Contract Infrastructure
-9.  Content Moderation System
-10. Governance (DAO)
-11. Security & Privacy
-12. Roadmap
-13. Conclusion
+7.  JoinLumina Marketplace
+8.  The Forge Academy
+9.  DEX & Bridge
+10. Token Economics (AXM)
+11. Smart Contract Infrastructure
+12. Content Moderation System
+13. Governance (DAO)
+14. Security & Privacy
+15. Roadmap
+16. Conclusion
 
 ================================================================================
 1. EXECUTIVE SUMMARY
@@ -79,10 +87,13 @@ inspiration, and moral values are not just welcomed but actively rewarded.
 KEY HIGHLIGHTS:
   Network:           Arbitrum One (Layer 2 Ethereum)
   Native Token:      AXM (AXIOM Token)
-  Smart Contracts:   6 integrated contracts for complete decentralization
+  Smart Contracts:   9 integrated contracts for complete decentralization
   Content Policy:    Zero tolerance for harmful content with 3-strike system
   Governance:        Community-driven DAO with on-chain voting
   Moderation:        AI-powered 24/7 content screening with human oversight
+  Marketplace:       Web3-native commerce with 2% fees and NFT shop ownership
+  Academy:           The Forge educational platform with NFT certifications
+  Exchange:          Native DEX and L1/L2 bridge for token operations
 
 ================================================================================
 2. VISION & MISSION
@@ -177,7 +188,94 @@ CIVIC ENGAGEMENT:
   - Phone Banking Tools
 
 ================================================================================
-7. TOKEN ECONOMICS (AXM)
+7. JOINLUMINA MARKETPLACE
+================================================================================
+
+JoinLumina is a Web3-native commerce platform integrated into Lumina, enabling
+creators and businesses to sell products using AXM tokens with built-in
+affiliate systems and buy-to-earn mechanics.
+
+MARKETPLACE FEATURES:
+  - NFT Shop Ownership - Each shop is a unique NFT on Arbitrum One
+  - Instant AXM Payments - No credit card fees, instant settlement
+  - 2% Split-Fee System - Fair fees split between buyer and seller
+  - Buy-to-Earn - Earn AXM tokens on every purchase
+  - Review-to-Earn - Get rewarded for helpful product reviews
+  - Creator Affiliates - Earn commissions by promoting products
+  - Live Shopping - Real-time video commerce (Coming Soon)
+
+FEE STRUCTURE:
+  Buyers pay:     Item price + 2% platform fee
+  Sellers receive: Item price - 2% platform fee
+  Affiliate fee:  Up to 5% (configurable by shop owner)
+  Total fees:     Maximum 9% (2% + 2% + 5% affiliate)
+
+SHOP OWNERSHIP:
+  - Shops are tradeable NFTs on the marketplace
+  - Shop owners have full control over products, pricing, settings
+  - Multi-shop cart checkout for seamless buyer experience
+  - On-chain transaction verification for all payments
+
+DISPUTE RESOLUTION:
+  - DAO-governed dispute system
+  - Community arbitrators stake AXM to participate
+  - Transparent evidence-based resolution process
+
+================================================================================
+8. THE FORGE ACADEMY
+================================================================================
+
+The Forge is Lumina's educational platform, designed to help users master
+Web3 technologies, blockchain development, and digital skills while earning
+certifications as NFTs.
+
+ACADEMY FEATURES:
+  - Structured Courses - Progressive learning paths for all skill levels
+  - Lesson Tracking - Track progress across courses and modules
+  - NFT Certifications - Earn blockchain-verified certificates
+  - XP & Leveling - Gamified learning with experience points
+  - Instructor Rewards - Creators earn AXM for popular courses
+
+COURSE CATEGORIES:
+  - Blockchain Fundamentals
+  - Smart Contract Development
+  - DeFi & Token Economics
+  - NFT Creation & Trading
+  - Web3 Security Best Practices
+  - DAO Governance & Operations
+
+INTEGRATION:
+  Contract: AxiomAcademyHub
+  Features: Course enrollment, progress tracking, certificate minting
+  Rewards:  XP points, AXM tokens, NFT certificates
+
+================================================================================
+9. DEX & BRIDGE
+================================================================================
+
+Lumina integrates a decentralized exchange and cross-chain bridge to provide
+users with seamless token operations within the platform.
+
+EXCHANGE FEATURES:
+  - Token Swaps - Instant AXM/ETH swaps with minimal slippage
+  - Liquidity Pools - Provide liquidity and earn trading fees
+  - Slippage Settings - Configurable trade protection
+  - Price Charts - Real-time market data and analytics
+
+BRIDGE FEATURES:
+  - L1/L2 Bridging - Move assets between Ethereum and Arbitrum
+  - ETH Deposits - Bridge ETH from mainnet to Arbitrum One
+  - Token Withdrawals - Move tokens back to Ethereum L1
+  - Gas Estimation - Accurate fee predictions for cross-chain ops
+  - Transaction Tracking - Monitor bridge operations in real-time
+
+INTEGRATION:
+  Exchange Contract: AxiomExchangeHub
+  Bridge: @arbitrum/sdk for native L1/L2 operations
+  Supported Tokens: ETH, AXM, and approved ERC-20 tokens
+
+================================================================================
+10. TOKEN ECONOMICS (AXM)
 ================================================================================
 
 TOKEN OVERVIEW:
