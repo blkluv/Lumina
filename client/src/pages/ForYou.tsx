@@ -331,7 +331,11 @@ function VideoCard({
           </Link>
 
           <button
-            onClick={handleLike}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleLike();
+            }}
             className="flex flex-col items-center gap-1 group"
             data-testid="button-like-video"
           >
@@ -346,7 +350,10 @@ function VideoCard({
           </button>
 
           <button
-            onClick={() => setShowCommentModal(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowCommentModal(true);
+            }}
             className="flex flex-col items-center gap-1 group"
             data-testid="button-comment-video"
           >
@@ -359,7 +366,10 @@ function VideoCard({
 
           {user?.id !== post.author.id && (
             <button
-              onClick={() => setShowTipModal(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTipModal(true);
+              }}
               className="flex flex-col items-center gap-1 group"
               data-testid="button-tip-video"
             >
