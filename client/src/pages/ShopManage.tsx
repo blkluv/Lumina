@@ -30,6 +30,7 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  X,
   Settings,
   Save,
   ExternalLink,
@@ -500,26 +501,33 @@ export default function ShopManage() {
                       <Label>Product Images ({productForm.media.length}/{MAX_IMAGES})</Label>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {productForm.media.map((url, index) => (
-                          <div key={index} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted">
+                          <div key={index} className="relative w-20 h-20 rounded-md border bg-muted">
                             <img 
                               src={url} 
                               alt={`Product ${index + 1}`} 
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-cover rounded-md"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.nextElementSibling?.classList.remove('hidden');
+                              }}
                             />
+                            <div className="hidden absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground">
+                              Invalid URL
+                            </div>
                             {index === 0 && (
-                              <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-br">
+                              <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-tl-md rounded-br">
                                 Main
                               </span>
                             )}
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="absolute -top-1 -right-1 h-5 w-5 rounded-full shadow-md"
+                            <button
+                              type="button"
+                              className="absolute top-0 right-0 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md translate-x-1/3 -translate-y-1/3"
                               onClick={() => handleRemoveImage(index)}
                               data-testid={`button-remove-image-${index}`}
                             >
-                              <XCircle className="h-3 w-3" />
-                            </Button>
+                              <X className="h-3 w-3" />
+                            </button>
                           </div>
                         ))}
                         {productForm.media.length < MAX_IMAGES && (
@@ -640,26 +648,33 @@ export default function ShopManage() {
                       <Label>Product Images ({productForm.media.length}/{MAX_IMAGES})</Label>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {productForm.media.map((url, index) => (
-                          <div key={index} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted">
+                          <div key={index} className="relative w-20 h-20 rounded-md border bg-muted">
                             <img 
                               src={url} 
                               alt={`Product ${index + 1}`} 
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-cover rounded-md"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.nextElementSibling?.classList.remove('hidden');
+                              }}
                             />
+                            <div className="hidden absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground">
+                              Invalid URL
+                            </div>
                             {index === 0 && (
-                              <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-br">
+                              <span className="absolute top-0 left-0 bg-primary text-primary-foreground text-[10px] px-1 rounded-tl-md rounded-br">
                                 Main
                               </span>
                             )}
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="absolute -top-1 -right-1 h-5 w-5 rounded-full shadow-md"
+                            <button
+                              type="button"
+                              className="absolute top-0 right-0 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md translate-x-1/3 -translate-y-1/3"
                               onClick={() => handleRemoveImage(index)}
                               data-testid={`button-edit-remove-image-${index}`}
                             >
-                              <XCircle className="h-3 w-3" />
-                            </Button>
+                              <X className="h-3 w-3" />
+                            </button>
                           </div>
                         ))}
                         {productForm.media.length < MAX_IMAGES && (
