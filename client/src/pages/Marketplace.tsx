@@ -375,6 +375,10 @@ export default function Marketplace() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="learn" data-testid="tab-learn">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Learn
+            </TabsTrigger>
             <TabsTrigger value="browse" data-testid="tab-browse">
               <Package className="h-4 w-4 mr-2" />
               Products
@@ -390,10 +394,6 @@ export default function Marketplace() {
             <TabsTrigger value="affiliates" data-testid="tab-affiliates">
               <Link2 className="h-4 w-4 mr-2" />
               Affiliates
-            </TabsTrigger>
-            <TabsTrigger value="learn" data-testid="tab-learn">
-              <BookOpen className="h-4 w-4 mr-2" />
-              Learn
             </TabsTrigger>
           </TabsList>
 
