@@ -33,6 +33,8 @@ import {
   Settings,
   Save,
   ExternalLink,
+  Upload,
+  ImageIcon,
 } from "lucide-react";
 
 interface Shop {
@@ -116,6 +118,7 @@ export default function ShopManage() {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ShopProduct | null>(null);
   const [shopEdits, setShopEdits] = useState<Partial<Shop>>({});
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [productForm, setProductForm] = useState({
     title: "",
     description: "",
@@ -125,6 +128,44 @@ export default function ShopManage() {
     inventory: "",
     thumbnailUrl: "",
   });
+
+  const handleImageUpload = async (file: File) => {
+    if (!file) return;
+    
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({ title: "File too large", description: "Maximum file size is 5MB", variant: "destructive" });
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "Please upload a JPG, PNG, GIF, or WebP image", variant: "destructive" });
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const res = await apiRequest("POST", "/api/objects/upload", {});
+      const { uploadURL } = await res.json();
+
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+
+      if (!uploadRes.ok) throw new Error("Upload failed");
+
+      const imageUrl = uploadURL.split("?")[0];
+      setProductForm(p => ({ ...p, thumbnailUrl: imageUrl }));
+      toast({ title: "Image uploaded successfully" });
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const { data: shop, isLoading: shopLoading } = useQuery<Shop>({
     queryKey: ["/api/marketplace/shops", slug],
@@ -438,14 +479,49 @@ export default function ShopManage() {
                       </Select>
                     </div>
                     <div>
-                      <Label htmlFor="thumbnailUrl">Thumbnail URL</Label>
-                      <Input 
-                        id="thumbnailUrl" 
-                        value={productForm.thumbnailUrl} 
-                        onChange={(e) => setProductForm(p => ({ ...p, thumbnailUrl: e.target.value }))}
-                        placeholder="https://..."
-                        data-testid="input-product-thumbnail"
-                      />
+                      <Label>Product Image</Label>
+                      <div className="mt-2">
+                        {productForm.thumbnailUrl ? (
+                          <div className="relative w-32 h-32 rounded-md overflow-hidden border bg-muted">
+                            <img 
+                              src={productForm.thumbnailUrl} 
+                              alt="Product preview" 
+                              className="w-full h-full object-cover"
+                            />
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-1 right-1 h-6 w-6"
+                              onClick={() => setProductForm(p => ({ ...p, thumbnailUrl: "" }))}
+                              data-testid="button-remove-image"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed rounded-md cursor-pointer hover:border-primary transition-colors">
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/gif,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleImageUpload(file);
+                              }}
+                              disabled={uploadingImage}
+                              data-testid="input-product-image"
+                            />
+                            {uploadingImage ? (
+                              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            ) : (
+                              <>
+                                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                                <span className="text-xs text-muted-foreground">Upload Image</span>
+                              </>
+                            )}
+                          </label>
+                        )}
+                      </div>
                     </div>
                     <Button 
                       className="w-full gap-2" 
