@@ -148,6 +148,7 @@ function ChatView({ conversationId }: { conversationId: string }) {
   const [lastRead, setLastRead] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const otherTypingTimeoutRef = useRef<NodeJS.Timeout>();
   const queryClient = useQueryClient();
 
   const { data: conversation, isLoading } = useQuery<ConversationWithMessages>({
@@ -189,7 +190,10 @@ function ChatView({ conversationId }: { conversationId: string }) {
       if (e.detail?.conversationId === conversationId && e.detail?.senderId !== user?.id) {
         setOtherUserTyping(e.detail.isTyping);
         if (e.detail.isTyping) {
-          setTimeout(() => setOtherUserTyping(false), 5000);
+          if (otherTypingTimeoutRef.current) {
+            clearTimeout(otherTypingTimeoutRef.current);
+          }
+          otherTypingTimeoutRef.current = setTimeout(() => setOtherUserTyping(false), 5000);
         }
       }
     };
@@ -206,6 +210,12 @@ function ChatView({ conversationId }: { conversationId: string }) {
     return () => {
       window.removeEventListener("ws:typing", handleTypingEvent as EventListener);
       window.removeEventListener("ws:read_receipt", handleReadReceipt as EventListener);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (otherTypingTimeoutRef.current) {
+        clearTimeout(otherTypingTimeoutRef.current);
+      }
     };
   }, [conversationId, user?.id]);
 

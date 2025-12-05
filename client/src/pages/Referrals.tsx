@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,6 +110,15 @@ function StatCard({ title, value, icon: Icon, subtext }: {
 export default function Referrals() {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const { data: codeData, isLoading: codeLoading } = useQuery<{ code: string }>({
     queryKey: ["/api/referrals/code"],
@@ -153,7 +162,10 @@ export default function Referrals() {
         await navigator.clipboard.writeText(referralLink);
         setCopied(true);
         toast({ title: "Link copied to clipboard!" });
-        setTimeout(() => setCopied(false), 2000);
+        if (copyTimeoutRef.current) {
+          clearTimeout(copyTimeoutRef.current);
+        }
+        copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
       } catch {
         toast({ title: "Failed to copy link", variant: "destructive" });
       }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export default function Treasury() {
   const [isLoading, setIsLoading] = useState(true);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const copyTimeoutRef = useRef<NodeJS.Timeout>();
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -75,7 +76,12 @@ export default function Treasury() {
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
   }, []);
 
   const copyAddress = async (address: string, label: string) => {
@@ -85,7 +91,10 @@ export default function Treasury() {
       title: "Address Copied",
       description: `${label} address copied to clipboard`,
     });
-    setTimeout(() => setCopiedAddress(null), 2000);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => setCopiedAddress(null), 2000);
   };
 
   const formatNumber = (value: string | number): string => {

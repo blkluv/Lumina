@@ -49,6 +49,15 @@ export default function PostDetail() {
   const [copied, setCopied] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const { data: post, isLoading, error } = useQuery<PostWithAuthor>({
     queryKey: ["/api/posts", id],
@@ -96,7 +105,10 @@ export default function PostDetail() {
         title: "Link copied!",
         description: "Post link has been copied to your clipboard.",
       });
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       toast({
         title: "Failed to copy",
