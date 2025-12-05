@@ -500,7 +500,7 @@ export default function ShopManage() {
                       <Label>Product Images ({productForm.media.length}/{MAX_IMAGES})</Label>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {productForm.media.map((url, index) => (
-                          <div key={index} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted group">
+                          <div key={index} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted">
                             <img 
                               src={url} 
                               alt={`Product ${index + 1}`} 
@@ -514,7 +514,7 @@ export default function ShopManage() {
                             <Button
                               variant="destructive"
                               size="icon"
-                              className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="absolute -top-1 -right-1 h-5 w-5 rounded-full shadow-md"
                               onClick={() => handleRemoveImage(index)}
                               data-testid={`button-remove-image-${index}`}
                             >
@@ -640,7 +640,7 @@ export default function ShopManage() {
                       <Label>Product Images ({productForm.media.length}/{MAX_IMAGES})</Label>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {productForm.media.map((url, index) => (
-                          <div key={index} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted group">
+                          <div key={index} className="relative w-20 h-20 rounded-md overflow-hidden border bg-muted">
                             <img 
                               src={url} 
                               alt={`Product ${index + 1}`} 
@@ -654,7 +654,7 @@ export default function ShopManage() {
                             <Button
                               variant="destructive"
                               size="icon"
-                              className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="absolute -top-1 -right-1 h-5 w-5 rounded-full shadow-md"
                               onClick={() => handleRemoveImage(index)}
                               data-testid={`button-edit-remove-image-${index}`}
                             >
