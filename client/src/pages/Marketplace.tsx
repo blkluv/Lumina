@@ -60,11 +60,10 @@ const shopCategories = [
   { value: "all", label: "All Categories" },
   { value: "fashion", label: "Fashion & Apparel" },
   { value: "electronics", label: "Electronics & Tech" },
-  { value: "art", label: "Art & Collectibles" },
+  { value: "collectibles", label: "Art & Collectibles" },
   { value: "digital", label: "Digital Products" },
   { value: "home", label: "Home & Living" },
   { value: "beauty", label: "Beauty & Health" },
-  { value: "sports", label: "Sports & Outdoors" },
   { value: "food", label: "Food & Beverages" },
   { value: "services", label: "Services" },
   { value: "other", label: "Other" },
@@ -221,11 +220,10 @@ export default function Marketplace() {
     switch (category) {
       case "fashion": return <Tag className="h-4 w-4" />;
       case "electronics": return <Zap className="h-4 w-4" />;
-      case "art": return <Sparkles className="h-4 w-4" />;
+      case "collectibles": return <Sparkles className="h-4 w-4" />;
       case "digital": return <Package className="h-4 w-4" />;
       case "home": return <Store className="h-4 w-4" />;
       case "beauty": return <Heart className="h-4 w-4" />;
-      case "sports": return <TrendingUp className="h-4 w-4" />;
       case "food": return <Gift className="h-4 w-4" />;
       case "services": return <Users className="h-4 w-4" />;
       default: return <Package className="h-4 w-4" />;

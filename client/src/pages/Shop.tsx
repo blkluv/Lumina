@@ -70,9 +70,13 @@ interface Order {
 }
 
 const categories = [
+  { value: "fashion", label: "Fashion & Apparel" },
+  { value: "electronics", label: "Electronics & Tech" },
+  { value: "collectibles", label: "Art & Collectibles" },
   { value: "digital", label: "Digital Products" },
-  { value: "merchandise", label: "Merchandise" },
-  { value: "art", label: "Art & Collectibles" },
+  { value: "home", label: "Home & Living" },
+  { value: "beauty", label: "Beauty & Health" },
+  { value: "food", label: "Food & Beverages" },
   { value: "services", label: "Services" },
   { value: "other", label: "Other" },
 ];

@@ -3111,7 +3111,7 @@ export const shopStatusEnum = pgEnum("shop_status", ["pending", "active", "suspe
 export const shopProductStatusEnum = pgEnum("shop_product_status", ["draft", "active", "paused", "sold_out", "archived"]);
 export const shopOrderStatusEnum = pgEnum("shop_order_status", ["pending", "paid", "processing", "shipped", "delivered", "cancelled", "refunded", "disputed"]);
 export const shopProductCategoryEnum = pgEnum("shop_product_category", [
-  "digital", "physical", "service", "nft", "subscription", "course", "merchandise", "art", "music", "other"
+  "fashion", "electronics", "beauty", "home", "food", "services", "digital", "collectibles", "other"
 ]);
 export const shopProductTypeEnum = pgEnum("shop_product_type", ["one_time", "subscription", "auction", "pre_order"]);
 
