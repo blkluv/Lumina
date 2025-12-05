@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
-import { Image, Video, X, Loader2, Globe, Users, AlertTriangle, ShieldCheck, Shield } from "lucide-react";
+import { Image, Video, X, Loader2, Globe, Users, AlertTriangle, ShieldCheck, Shield, Upload } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,8 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
   const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const [moderationWarning, setModerationWarning] = useState<{
     isViolation: boolean;
     severity: string;
@@ -73,18 +76,54 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     }
   };
 
-  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 100 * 1024 * 1024) {
+      // Allow up to 500MB for 3-minute videos
+      if (file.size > 500 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: "Videos must be under 100MB",
+          description: "Videos must be under 500MB",
           variant: "destructive",
         });
         return;
       }
-      handleMediaSelect(file, "video");
+      
+      // Validate video duration (max 3 minutes = 180 seconds)
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      
+      const durationPromise = new Promise<number>((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          URL.revokeObjectURL(video.src);
+          resolve(video.duration);
+        };
+        video.onerror = () => {
+          URL.revokeObjectURL(video.src);
+          reject(new Error("Failed to load video"));
+        };
+      });
+      
+      video.src = URL.createObjectURL(file);
+      
+      try {
+        const duration = await durationPromise;
+        if (duration > 180) {
+          toast({
+            title: "Video too long",
+            description: "Videos must be 3 minutes or less",
+            variant: "destructive",
+          });
+          return;
+        }
+        handleMediaSelect(file, "video");
+      } catch {
+        toast({
+          title: "Invalid video",
+          description: "Could not process video file",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -123,6 +162,40 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     }
   };
 
+  const uploadWithProgress = (url: string, file: File): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(percent);
+        }
+      });
+      
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
+      
+      xhr.addEventListener("error", () => {
+        reject(new Error("Upload failed - network error"));
+      });
+      
+      xhr.addEventListener("timeout", () => {
+        reject(new Error("Upload timed out - please try again"));
+      });
+      
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.timeout = 600000; // 10 minutes timeout for large files
+      xhr.send(file);
+    });
+  };
+
   const handleSubmit = async () => {
     if ((!content.trim() && !mediaFile) || isOverLimit) return;
 
@@ -138,20 +211,20 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     }
 
     setIsSubmitting(true);
+    setUploadProgress(0);
+    
     try {
       let mediaUrl = null;
       
       if (mediaFile) {
+        setIsUploading(true);
         const uploadRes = await apiRequest("POST", "/api/objects/upload", {});
         const { uploadURL } = await uploadRes.json();
         
-        await fetch(uploadURL, {
-          method: "PUT",
-          body: mediaFile,
-          headers: {
-            "Content-Type": mediaFile.type,
-          },
-        });
+        // Use XMLHttpRequest for progress tracking on large files
+        await uploadWithProgress(uploadURL, mediaFile);
+        
+        setIsUploading(false);
         
         const updateRes = await apiRequest("PUT", "/api/media", {
           mediaURL: uploadURL.split("?")[0],
@@ -215,6 +288,8 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       }
     } finally {
       setIsSubmitting(false);
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -240,6 +315,20 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
               className="min-h-24 resize-none border-0 p-0 text-base focus-visible:ring-0 bg-transparent placeholder:text-muted-foreground"
               data-testid="input-post-content"
             />
+
+            {/* Upload Progress */}
+            {isUploading && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <Upload className="h-4 w-4 animate-pulse" />
+                    Uploading video...
+                  </span>
+                  <span className="text-primary font-medium">{uploadProgress}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
 
             {/* Moderation Warning */}
             {moderationWarning && (

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Camera, Image, X, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Camera, Image, X, Loader2, Upload } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ export function StoryCreator({ open, onOpenChange }: StoryCreatorProps) {
   const [caption, setCaption] = useState("");
   const [backgroundColor, setBackgroundColor] = useState(BACKGROUND_COLORS[0]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   const createStoryMutation = useMutation({
     mutationFn: async (data: { mediaUrl: string; mediaType: string; caption?: string; backgroundColor?: string }) => {
@@ -55,7 +57,7 @@ export function StoryCreator({ open, onOpenChange }: StoryCreatorProps) {
     },
   });
   
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -64,48 +66,123 @@ export function StoryCreator({ open, onOpenChange }: StoryCreatorProps) {
       return;
     }
     
+    const isVideo = file.type.startsWith("video/");
+    
+    // File size validation
+    if (isVideo && file.size > 500 * 1024 * 1024) {
+      toast({ title: "Videos must be under 500MB", variant: "destructive" });
+      return;
+    }
+    if (!isVideo && file.size > 10 * 1024 * 1024) {
+      toast({ title: "Images must be under 10MB", variant: "destructive" });
+      return;
+    }
+    
+    // Video duration validation (max 3 minutes for stories)
+    if (isVideo) {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      
+      const durationPromise = new Promise<number>((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          URL.revokeObjectURL(video.src);
+          resolve(video.duration);
+        };
+        video.onerror = () => {
+          URL.revokeObjectURL(video.src);
+          reject(new Error("Failed to load video"));
+        };
+      });
+      
+      video.src = URL.createObjectURL(file);
+      
+      try {
+        const duration = await durationPromise;
+        if (duration > 180) {
+          toast({ title: "Videos must be 3 minutes or less", variant: "destructive" });
+          return;
+        }
+      } catch {
+        toast({ title: "Could not process video file", variant: "destructive" });
+        return;
+      }
+    }
+    
     setMediaFile(file);
-    setMediaType(file.type.startsWith("video/") ? "video" : "image");
+    setMediaType(isVideo ? "video" : "image");
     
     const reader = new FileReader();
     reader.onload = () => setMediaPreview(reader.result as string);
     reader.readAsDataURL(file);
   };
   
+  const uploadWithProgress = (url: string, file: File): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(percent);
+        }
+      });
+      
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
+      
+      xhr.addEventListener("error", () => {
+        reject(new Error("Upload failed - network error"));
+      });
+      
+      xhr.addEventListener("timeout", () => {
+        reject(new Error("Upload timed out - please try again"));
+      });
+      
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.timeout = 600000; // 10 minutes timeout for large files
+      xhr.send(file);
+    });
+  };
+
   const uploadAndCreate = async () => {
     if (!mediaFile) return;
     
     setIsUploading(true);
+    setUploadProgress(0);
     
     try {
       const uploadRes = await apiRequest("POST", "/api/objects/upload");
       const { uploadURL } = await uploadRes.json();
       
-      const uploadFormData = new FormData();
-      Object.entries(uploadURL.fields).forEach(([key, value]) => {
-        uploadFormData.append(key, value as string);
+      // Use XMLHttpRequest for progress tracking on large files
+      await uploadWithProgress(uploadURL, mediaFile);
+      
+      const updateRes = await apiRequest("PUT", "/api/media", {
+        mediaURL: uploadURL.split("?")[0],
       });
-      uploadFormData.append("file", mediaFile);
-      
-      await fetch(uploadURL.url, {
-        method: "POST",
-        body: uploadFormData,
-      });
-      
-      const mediaUrl = `/objects/${uploadURL.fields.key}`;
-      
-      await apiRequest("PUT", "/api/media", { mediaURL: mediaUrl });
+      const { objectPath } = await updateRes.json();
       
       await createStoryMutation.mutateAsync({
-        mediaUrl,
+        mediaUrl: objectPath,
         mediaType,
         caption: caption.trim() || undefined,
         backgroundColor,
       });
-    } catch (error) {
-      toast({ title: "Upload failed", variant: "destructive" });
+    } catch (error: any) {
+      toast({ 
+        title: "Upload failed", 
+        description: error?.message || "Please try again",
+        variant: "destructive" 
+      });
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
   
@@ -235,6 +312,20 @@ export function StoryCreator({ open, onOpenChange }: StoryCreatorProps) {
             </div>
           )}
           
+          {/* Upload Progress */}
+          {isUploading && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Upload className="h-4 w-4 animate-pulse" />
+                  Uploading...
+                </span>
+                <span className="text-primary font-medium">{uploadProgress}%</span>
+              </div>
+              <Progress value={uploadProgress} className="h-2" />
+            </div>
+          )}
+
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -256,7 +347,7 @@ export function StoryCreator({ open, onOpenChange }: StoryCreatorProps) {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Posting...
+                  {isUploading ? `Uploading ${uploadProgress}%...` : "Posting..."}
                 </>
               ) : (
                 "Post Story"
