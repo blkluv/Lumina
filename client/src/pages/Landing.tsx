@@ -22,6 +22,7 @@ import {
   Video,
   MessageSquare
 } from "lucide-react";
+import luminaLogo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -673,10 +674,10 @@ export default function Landing() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
               <div className="col-span-2 md:col-span-1">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-400 flex items-center justify-center">
-                    <span className="font-bold text-lg text-primary-foreground">L</span>
+                  <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg shadow-cyan-500/25">
+                    <img src={luminaLogo} alt="Lumina" className="w-full h-full object-cover" />
                   </div>
-                  <span className="font-bold text-xl">Lumina</span>
+                  <span className="font-bold text-xl bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">Lumina</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Uplifting humanity through positive social media and Web3 rewards.

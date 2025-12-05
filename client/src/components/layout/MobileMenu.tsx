@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { X, Home, Play, Users, User, Settings, TrendingUp, Coins, Search, MessageCircle, BarChart3, Trophy, Radio, ShoppingBag, ImageIcon, Vote, Lock, Award, Megaphone, Hand, ClipboardList, Phone, Shield, Building2, Gift, GraduationCap, ArrowDownUp, Server, ArrowLeftRight, FileText, Wallet, Store } from "lucide-react";
+import luminaLogo from "@/assets/logo.png";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -91,10 +92,10 @@ export function MobileMenu({ open, onOpenChange }: MobileMenuProps) {
       <SheetContent side="left" className="w-[300px] p-0">
         <SheetHeader className="p-4 border-b">
           <SheetTitle className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-400 flex items-center justify-center">
-              <span className="font-bold text-primary-foreground">L</span>
+            <div className="w-8 h-8 rounded-full overflow-hidden shadow-lg shadow-cyan-500/25">
+              <img src={luminaLogo} alt="Lumina" className="w-full h-full object-cover" />
             </div>
-            Lumina
+            <span className="bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">Lumina</span>
           </SheetTitle>
         </SheetHeader>
 

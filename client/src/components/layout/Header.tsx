@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Search, Plus, Menu, Moon, Sun, Wallet, AlertTriangle, ArrowLeftRight, GraduationCap, ArrowDownUp, Server } from "lucide-react";
+import luminaLogo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -43,11 +44,11 @@ export function Header() {
           <MobileMenu open={mobileMenuOpen} onOpenChange={setMobileMenuOpen} />
           
           <Link href="/" className="flex items-center gap-2 group" data-testid="link-home">
-            <div className="relative w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-emerald-400 flex items-center justify-center shadow-lg shadow-primary/25 group-hover:shadow-primary/40 transition-shadow">
-              <span className="font-bold text-primary-foreground text-lg">L</span>
-              <div className="absolute inset-0 rounded-lg bg-primary/20 blur-sm -z-10" />
+            <div className="relative w-9 h-9 rounded-full overflow-hidden shadow-lg shadow-cyan-500/25 group-hover:shadow-cyan-500/40 transition-shadow">
+              <img src={luminaLogo} alt="Lumina" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 rounded-full bg-cyan-400/10 blur-sm -z-10" />
             </div>
-            <span className="hidden sm:block font-semibold text-lg tracking-tight">
+            <span className="hidden sm:block font-semibold text-lg tracking-tight bg-gradient-to-r from-cyan-400 to-cyan-300 bg-clip-text text-transparent">
               Lumina
             </span>
           </Link>
