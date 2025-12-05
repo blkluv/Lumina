@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { pool } from "./db";
 import connectPgSimple from "connect-pg-simple";
 import { notificationHub } from "./websocket";
+import { ogTagMiddleware } from "./ogRenderer";
 
 const app = express();
 const httpServer = createServer(app);
@@ -101,6 +102,9 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
     throw err;
   });
+
+  // OG tag middleware for social media sharing (must be before static/vite handlers)
+  app.use(ogTagMiddleware);
 
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
