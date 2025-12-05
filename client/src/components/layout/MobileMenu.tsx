@@ -36,7 +36,6 @@ const web3Items = [
 ];
 
 const otherItems = [
-  { href: "/shop", label: "Shop", icon: ShoppingBag },
   { href: "/marketplace", label: "Marketplace", icon: Store },
   { href: "/referrals", label: "Referrals", icon: Gift },
   { href: "/whitepaper", label: "Whitepaper", icon: FileText },

@@ -26,7 +26,6 @@ import Compose from "@/pages/Compose";
 import Rewards from "@/pages/Rewards";
 import Live from "@/pages/Live";
 import LiveStreamViewer from "@/pages/LiveStreamViewer";
-import Shop from "@/pages/Shop";
 import NFTs from "@/pages/NFTs";
 import Governance from "@/pages/Governance";
 import Staking from "@/pages/Staking";
@@ -95,7 +94,6 @@ function Router() {
       <Route path="/rewards" component={() => <ProtectedRoute component={Rewards} />} />
       <Route path="/live" component={Live} />
       <Route path="/live/:id" component={LiveStreamViewer} />
-      <Route path="/shop" component={Shop} />
       <Route path="/nfts" component={NFTs} />
       <Route path="/governance" component={Governance} />
       <Route path="/staking" component={() => <ProtectedRoute component={Staking} />} />
