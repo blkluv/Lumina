@@ -644,7 +644,7 @@ export default function Marketplace() {
                       <div>
                         <h4 className="font-semibold">Pay with AXM Tokens</h4>
                         <p className="text-sm text-muted-foreground">
-                          Checkout with AXM tokens. Payments are instant and go directly to sellers with only 2% platform fee.
+                          Checkout with AXM tokens. A small 2% fee is added at checkout, and payments go directly to sellers.
                         </p>
                       </div>
                     </div>
@@ -702,7 +702,7 @@ export default function Marketplace() {
                       <div>
                         <h4 className="font-semibold">Receive Instant Payments</h4>
                         <p className="text-sm text-muted-foreground">
-                          When customers buy, 98% of the payment goes directly to your wallet. No waiting, no holdbacks.
+                          When customers buy, payment goes directly to your wallet minus a 2% platform fee. No waiting, no holdbacks.
                         </p>
                       </div>
                     </div>
@@ -834,8 +834,8 @@ export default function Marketplace() {
                 </div>
                 <h4 className="text-lg font-semibold mb-2">Ultra-Low Fees</h4>
                 <p className="text-sm text-muted-foreground">
-                  Keep 98% of every sale. Our 2% platform fee is the lowest in the industry, 
-                  meaning more money in your pocket with every transaction.
+                  Just 2% platform fee — the lowest in the industry. Buyers pay a small fee on top, 
+                  and sellers receive their full price minus the fee. No hidden charges.
                 </p>
               </Card>
 
@@ -1048,12 +1048,12 @@ export default function Marketplace() {
                 </AccordionItem>
 
                 <AccordionItem value="faq-2">
-                  <AccordionTrigger className="text-left">Why are fees so low compared to other platforms?</AccordionTrigger>
+                  <AccordionTrigger className="text-left">How does the fee structure work?</AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
-                    Traditional platforms charge high fees to cover payment processing, fraud prevention, and 
-                    middleman costs. Blockchain technology eliminates these intermediaries. Our 2% fee covers 
-                    platform maintenance and DAO treasury contributions. There are no hidden fees or payment 
-                    processor charges.
+                    We use a transparent split-fee system. Buyers pay a 2% platform fee added to their purchase total, 
+                    and sellers have the same 2% deducted from their payout. This fee is sent to the platform treasury 
+                    first, ensuring secure transactions. Blockchain technology eliminates traditional payment processor 
+                    fees, keeping our rates much lower than Amazon (15%), eBay (13%), or TikTok Shop (8%).
                   </AccordionContent>
                 </AccordionItem>
 
