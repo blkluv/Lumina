@@ -21,7 +21,7 @@ The platform features a dark emerald theme with glowing accents (HSL 160 84% 45%
 - **Content Moderation**: An AI-powered system, integrated via OpenAI (through Replit AI Integration), analyzes text and images for policy violations, implementing a 3-strike policy, automated flagging, and an admin review panel.
 
 ### Feature Specifications
-- **Core Social Features**: User profiles, content feeds (friends and algorithmic), diverse content posting (text, image, video), commenting, liking, following, and real-time direct messaging.
+- **Core Social Features**: User profiles, content feeds (friends and algorithmic), diverse content posting (text, image, video), commenting, liking, following, and real-time direct messaging. Video posts support custom thumbnails with three options: auto-generation (ffmpeg extracts frame at 2s), manual frame selection (6 preview frames), and custom image upload.
 - **Community Features**: Interest-based groups with creation, joining, and leaving functionalities, member management, role-based permissions, and group-specific feeds.
 - **Web3 Features**: AXM token integration (rewards, tipping, staking), an NFT gallery and marketplace, DAO governance with proposals and wallet signature-verified voting, and rewards claiming with point conversion to AXM.
 - **Creator Tools**: An analytics dashboard for creators and a referral program.

@@ -39,6 +39,7 @@ import { sendBulkEmail, emailTemplates, sendEmail } from "./services/email";
 import { sendSMS, smsTemplates } from "./services/sms";
 import { createCheckoutSession, isStripeConfigured, getPublishableKey, verifyStripeWebhookSignature, isWebhookSecretConfigured, type StripeWebhookEvent } from "./services/payments";
 import { contentModerationService, type ModerationResult } from "./services/contentModeration";
+import { generateAutoThumbnail, extractMultipleFrames, generateThumbnailAtTimestamp } from "./videoThumbnail";
 
 // Rate limiters for different endpoint categories
 const authLimiter = rateLimit({
@@ -1212,6 +1213,71 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error: any) {
       console.error("Proxy upload error:", error);
       res.status(500).json({ error: error.message || "Failed to upload file" });
+    }
+  });
+
+  // Video thumbnail endpoints
+  
+  // Auto-generate a thumbnail from video at default position (2 seconds)
+  app.post("/api/video/auto-thumbnail", requireAuth, async (req, res) => {
+    try {
+      const { videoPath } = req.body;
+      if (!videoPath) {
+        return res.status(400).json({ error: "videoPath is required" });
+      }
+      
+      console.log(`Generating auto thumbnail for: ${videoPath}`);
+      const result = await generateAutoThumbnail(videoPath, req.session.userId!);
+      
+      res.json({
+        thumbnailPath: result.thumbnailPath,
+        timestamp: result.timestamp
+      });
+    } catch (error: any) {
+      console.error("Auto thumbnail generation error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate thumbnail" });
+    }
+  });
+
+  // Extract multiple frames from video for user selection
+  app.post("/api/video/extract-frames", requireAuth, async (req, res) => {
+    try {
+      const { videoPath, frameCount = 6 } = req.body;
+      if (!videoPath) {
+        return res.status(400).json({ error: "videoPath is required" });
+      }
+      
+      console.log(`Extracting ${frameCount} frames from: ${videoPath}`);
+      const result = await extractMultipleFrames(videoPath, req.session.userId!, frameCount);
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Frame extraction error:", error);
+      res.status(500).json({ error: error.message || "Failed to extract frames" });
+    }
+  });
+
+  // Generate thumbnail at specific timestamp
+  app.post("/api/video/thumbnail-at-timestamp", requireAuth, async (req, res) => {
+    try {
+      const { videoPath, timestamp } = req.body;
+      if (!videoPath) {
+        return res.status(400).json({ error: "videoPath is required" });
+      }
+      if (typeof timestamp !== "number" || timestamp < 0) {
+        return res.status(400).json({ error: "Valid timestamp is required" });
+      }
+      
+      console.log(`Generating thumbnail at ${timestamp}s for: ${videoPath}`);
+      const result = await generateThumbnailAtTimestamp(videoPath, req.session.userId!, timestamp);
+      
+      res.json({
+        thumbnailPath: result.thumbnailPath,
+        timestamp: result.timestamp
+      });
+    } catch (error: any) {
+      console.error("Thumbnail generation error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate thumbnail" });
     }
   });
 

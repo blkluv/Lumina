@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/authContext";
 import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { VideoThumbnailSelector } from "./VideoThumbnailSelector";
 
 interface PostComposerProps {
   onSuccess?: () => void;
@@ -44,6 +45,12 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
   } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  
+  // Video thumbnail states
+  const [uploadedVideoPath, setUploadedVideoPath] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number>(0);
+  const [selectedThumbnail, setSelectedThumbnail] = useState<string | null>(null);
+  const [showThumbnailSelector, setShowThumbnailSelector] = useState(false);
 
   const maxLength = 500;
   const charCount = content.length;
@@ -116,6 +123,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
           });
           return;
         }
+        setVideoDuration(duration);
         handleMediaSelect(file, "video");
       } catch {
         toast({
@@ -131,6 +139,10 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     setMediaFile(null);
     setMediaPreview(null);
     setMediaType(null);
+    setUploadedVideoPath(null);
+    setVideoDuration(0);
+    setSelectedThumbnail(null);
+    setShowThumbnailSelector(false);
     if (imageInputRef.current) imageInputRef.current.value = "";
     if (videoInputRef.current) videoInputRef.current.value = "";
   };
@@ -263,6 +275,53 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     return objectPath;
   };
 
+  // Upload video and show thumbnail selector
+  const handleVideoUpload = async () => {
+    if (!mediaFile || mediaType !== "video") return;
+    
+    setIsSubmitting(true);
+    setUploadProgress(0);
+    setIsUploading(true);
+    
+    try {
+      const videoPath = await uploadViaProxy(mediaFile);
+      setUploadedVideoPath(videoPath);
+      setShowThumbnailSelector(true);
+      
+      toast({
+        title: "Video uploaded",
+        description: "Now choose a thumbnail for your video!",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload video",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setIsSubmitting(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleThumbnailSelect = (thumbnailPath: string) => {
+    setSelectedThumbnail(thumbnailPath);
+    setShowThumbnailSelector(false);
+    toast({
+      title: "Thumbnail selected",
+      description: "Click Post to publish your video!",
+    });
+  };
+
+  const handleSkipThumbnail = () => {
+    setShowThumbnailSelector(false);
+    toast({
+      title: "Thumbnail skipped",
+      description: "Your video will use a default thumbnail.",
+    });
+  };
+
   const handleSubmit = async () => {
     if ((!content.trim() && !mediaFile) || isOverLimit) return;
 
@@ -277,13 +336,19 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       return;
     }
 
+    // For videos that haven't been uploaded yet, upload first
+    if (mediaType === "video" && mediaFile && !uploadedVideoPath) {
+      await handleVideoUpload();
+      return;
+    }
+
     setIsSubmitting(true);
     setUploadProgress(0);
     
     try {
-      let mediaUrl = null;
+      let mediaUrl = uploadedVideoPath;
       
-      if (mediaFile) {
+      if (mediaFile && !mediaUrl) {
         setIsUploading(true);
         // Use proxy upload for videos (server-side resumable), direct for images
         if (mediaType === "video") {
@@ -298,6 +363,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
         content: content.trim(),
         postType: mediaType || "text",
         mediaUrl,
+        thumbnailUrl: selectedThumbnail,
         visibility,
         groupId: groupId || null,
         skipModeration: moderationWarning?.isViolation && 
@@ -445,7 +511,25 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
                 >
                   <X className="h-4 w-4 text-white" />
                 </Button>
+                {/* Show thumbnail indicator if selected */}
+                {selectedThumbnail && mediaType === "video" && (
+                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                    <Image className="h-3 w-3" />
+                    Thumbnail set
+                  </div>
+                )}
               </div>
+            )}
+
+            {/* Video Thumbnail Selector */}
+            {showThumbnailSelector && uploadedVideoPath && (
+              <VideoThumbnailSelector
+                videoPath={uploadedVideoPath}
+                videoDuration={videoDuration}
+                onThumbnailSelect={handleThumbnailSelect}
+                onSkip={handleSkipThumbnail}
+                className="mt-3"
+              />
             )}
 
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
@@ -533,6 +617,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
                     (!content.trim() && !mediaFile) || 
                     isOverLimit || 
                     isSubmitting ||
+                    showThumbnailSelector ||
                     (moderationWarning?.isViolation && 
                       (moderationWarning.severity === "high" || moderationWarning.severity === "critical"))
                   }
@@ -540,7 +625,9 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
                   data-testid="button-submit-post"
                 >
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Post
+                  {mediaType === "video" && !uploadedVideoPath 
+                    ? "Upload Video" 
+                    : "Post"}
                 </Button>
               </div>
             </div>
