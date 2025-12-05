@@ -563,7 +563,20 @@ export async function registerRoutes(app: Express): Promise<void> {
       const limit = parseInt(req.query.limit as string) || 20;
       const cursor = req.query.cursor as string | undefined;
       const result = await storage.getPosts({ limit, cursor, type: "video" });
-      res.json(result);
+      
+      // Add liked status for current user
+      const userId = req.session?.userId;
+      if (userId) {
+        const postsWithLikedStatus = await Promise.all(
+          result.posts.map(async (post) => {
+            const like = await storage.getLike(userId, post.id);
+            return { ...post, liked: !!like };
+          })
+        );
+        res.json({ ...result, posts: postsWithLikedStatus });
+      } else {
+        res.json(result);
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to get videos" });
     }

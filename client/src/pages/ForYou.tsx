@@ -41,7 +41,7 @@ function VideoCard({
 }: {
   post: PostWithAuthor;
   isActive: boolean;
-  onLike: (postId: string) => void;
+  onLike: (postId: string) => Promise<void>;
   onFollow: (userId: string) => void;
 }) {
   const { user } = useAuth();
@@ -50,7 +50,7 @@ function VideoCard({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false); // Start unmuted - browser will enforce if needed
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] = useState((post as any).liked ?? false);
   const [likeCount, setLikeCount] = useState(post.likeCount || 0);
   const [showTipModal, setShowTipModal] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
@@ -193,10 +193,33 @@ function VideoCard({
     setShowSoundPrompt(false);
   };
 
-  const handleLike = () => {
+  const handleLike = async () => {
+    if (!user) {
+      toast({
+        title: "Login required",
+        description: "Please log in to like videos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Optimistic update
+    const wasLiked = liked;
     setLiked(!liked);
     setLikeCount((prev) => (liked ? prev - 1 : prev + 1));
-    onLike(post.id);
+    
+    try {
+      await onLike(post.id);
+    } catch (error) {
+      // Revert on error
+      setLiked(wasLiked);
+      setLikeCount((prev) => (wasLiked ? prev : prev - 1));
+      toast({
+        title: "Failed to like",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -542,7 +565,11 @@ export default function ForYou() {
 
   const likeMutation = useMutation({
     mutationFn: async (postId: string) => {
-      await apiRequest("POST", `/api/posts/${postId}/like`, {});
+      const res = await apiRequest("POST", `/api/posts/${postId}/like`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/posts/videos"] });
     },
   });
 
@@ -651,7 +678,7 @@ export default function ForYou() {
                 <VideoCard
                   post={post}
                   isActive={index === currentIndex}
-                  onLike={(postId) => likeMutation.mutate(postId)}
+                  onLike={(postId) => likeMutation.mutateAsync(postId)}
                   onFollow={(userId) => followMutation.mutate(userId)}
                 />
               </div>
