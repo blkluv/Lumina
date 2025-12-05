@@ -120,6 +120,8 @@ export default function ShopManage() {
   const [editingProduct, setEditingProduct] = useState<ShopProduct | null>(null);
   const [shopEdits, setShopEdits] = useState<Partial<Shop>>({});
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [productForm, setProductForm] = useState({
     title: "",
     description: "",
@@ -188,6 +190,60 @@ export default function ShopManage() {
       ...p,
       media: p.media.filter((_, i) => i !== index)
     }));
+  };
+
+  const handleShopImageUpload = async (file: File, type: "logo" | "banner") => {
+    if (!file) return;
+    
+    const maxSize = type === "logo" ? 2 * 1024 * 1024 : 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({ 
+        title: "File too large", 
+        description: `Maximum file size is ${type === "logo" ? "2MB" : "5MB"}`, 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "Please upload a JPG, PNG, GIF, or WebP image", variant: "destructive" });
+      return;
+    }
+
+    if (type === "logo") setUploadingLogo(true);
+    else setUploadingBanner(true);
+
+    try {
+      const res = await apiRequest("POST", "/api/objects/upload", {});
+      const { uploadURL } = await res.json();
+
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+
+      if (!uploadRes.ok) throw new Error("Upload failed");
+
+      const gcsUrl = uploadURL.split("?")[0];
+      const mediaRes = await apiRequest("PUT", "/api/media", { mediaURL: gcsUrl });
+      if (!mediaRes.ok) throw new Error("Failed to finalize upload");
+      
+      const { objectPath } = await mediaRes.json();
+      
+      if (type === "logo") {
+        setShopEdits(p => ({ ...p, logoUrl: objectPath }));
+      } else {
+        setShopEdits(p => ({ ...p, bannerUrl: objectPath }));
+      }
+      toast({ title: `${type === "logo" ? "Logo" : "Banner"} uploaded successfully` });
+    } catch (error: any) {
+      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      if (type === "logo") setUploadingLogo(false);
+      else setUploadingBanner(false);
+    }
   };
 
   const { data: shop, isLoading: shopLoading } = useQuery<Shop>({
@@ -973,25 +1029,102 @@ export default function ShopManage() {
                     data-testid="input-shop-wallet"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="logoUrl">Logo URL</Label>
-                  <Input 
-                    id="logoUrl" 
-                    defaultValue={shop.logoUrl || ""}
-                    onChange={(e) => setShopEdits(p => ({ ...p, logoUrl: e.target.value }))}
-                    placeholder="https://..."
-                    data-testid="input-shop-logo"
-                  />
+                <div className="space-y-3">
+                  <Label>Shop Logo</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-24 w-24 rounded-full border-2 border-dashed bg-muted flex items-center justify-center overflow-hidden">
+                      {(shopEdits.logoUrl || shop.logoUrl) ? (
+                        <>
+                          <img 
+                            src={shopEdits.logoUrl || shop.logoUrl || ""} 
+                            alt="Shop logo" 
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            className="absolute top-0 right-0 h-5 w-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md translate-x-1/4 -translate-y-1/4"
+                            onClick={() => setShopEdits(p => ({ ...p, logoUrl: "" }))}
+                            data-testid="button-remove-logo"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <Store className="h-8 w-8 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/gif,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleShopImageUpload(file, "logo");
+                            e.target.value = "";
+                          }}
+                          disabled={uploadingLogo}
+                          data-testid="input-shop-logo"
+                        />
+                        <Button type="button" variant="outline" className="gap-2" disabled={uploadingLogo} asChild>
+                          <span>
+                            {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            Upload Logo
+                          </span>
+                        </Button>
+                      </label>
+                      <p className="text-xs text-muted-foreground mt-1">Recommended: 256x256px, max 2MB</p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="bannerUrl">Banner URL</Label>
-                  <Input 
-                    id="bannerUrl" 
-                    defaultValue={shop.bannerUrl || ""}
-                    onChange={(e) => setShopEdits(p => ({ ...p, bannerUrl: e.target.value }))}
-                    placeholder="https://..."
-                    data-testid="input-shop-banner"
-                  />
+                <div className="space-y-3">
+                  <Label>Shop Banner</Label>
+                  <div className="relative rounded-lg border-2 border-dashed bg-muted overflow-hidden">
+                    {(shopEdits.bannerUrl || shop.bannerUrl) ? (
+                      <>
+                        <img 
+                          src={shopEdits.bannerUrl || shop.bannerUrl || ""} 
+                          alt="Shop banner" 
+                          className="w-full h-32 object-cover"
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 h-6 w-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-md"
+                          onClick={() => setShopEdits(p => ({ ...p, bannerUrl: "" }))}
+                          data-testid="button-remove-banner"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="h-32 flex flex-col items-center justify-center gap-2">
+                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">No banner image</span>
+                      </div>
+                    )}
+                  </div>
+                  <label className="cursor-pointer inline-block">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleShopImageUpload(file, "banner");
+                        e.target.value = "";
+                      }}
+                      disabled={uploadingBanner}
+                      data-testid="input-shop-banner"
+                    />
+                    <Button type="button" variant="outline" className="gap-2" disabled={uploadingBanner} asChild>
+                      <span>
+                        {uploadingBanner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        Upload Banner
+                      </span>
+                    </Button>
+                  </label>
+                  <p className="text-xs text-muted-foreground">Recommended: 1200x400px, max 5MB</p>
                 </div>
                 <Separator />
                 <Button 
