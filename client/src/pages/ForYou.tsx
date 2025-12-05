@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { Heart, MessageCircle, Share2, Coins, User, Play, Pause, Volume2, VolumeX, ChevronUp, ChevronDown, Sparkles, Award, Loader2, Copy, Check, Twitter, Facebook, Link as LinkIcon } from "lucide-react";
+import { Heart, MessageCircle, Share2, Coins, User, Play, Pause, Volume2, VolumeX, ChevronUp, ChevronDown, Sparkles, Award, Loader2, Copy, Check, Twitter, Facebook, Link as LinkIcon, Trash2, MoreVertical } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { TipModal } from "@/components/modals/TipModal";
 import { CommentModal } from "@/components/modals/CommentModal";
 import { useAuth } from "@/lib/authContext";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { PostWithAuthor } from "@shared/schema";
 
@@ -57,8 +58,31 @@ function VideoCard({
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showSoundPrompt, setShowSoundPrompt] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const postUrl = `${window.location.origin}/post/${post.id}`;
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await apiRequest("DELETE", `/api/posts/${post.id}`);
+      toast({
+        title: "Video deleted",
+        description: "Your video has been removed.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts/videos"] });
+      setShowDeleteConfirm(false);
+    } catch (err) {
+      toast({
+        title: "Failed to delete",
+        description: "Could not delete the video. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
   const shareText = `Check out this video by @${post.author.username} on Lumina!`;
 
   const handleCopyLink = async () => {
@@ -361,6 +385,19 @@ function VideoCard({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {user?.id === post.author.id && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex flex-col items-center gap-1 group"
+              data-testid="button-delete-video"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center transition-all group-hover:bg-red-500/30 ring-1 ring-red-500/30">
+                <Trash2 className="h-6 w-6 text-red-400 transition-transform group-hover:scale-110" />
+              </div>
+              <span className="text-red-400 text-xs font-medium">Delete</span>
+            </button>
+          )}
         </div>
 
         <div className="absolute top-4 right-4 flex items-center gap-2">
@@ -417,6 +454,35 @@ function VideoCard({
         onOpenChange={setShowCommentModal}
         post={post}
       />
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this video?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete your video and remove it from the For You feed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-video"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
