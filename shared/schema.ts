@@ -3108,7 +3108,7 @@ export interface ContentAppealWithDetails extends ContentAppeal {
 // ============= LUMINA MARKETPLACE - PHASE 1: CORE SHOP & PRODUCTS =============
 
 export const shopStatusEnum = pgEnum("shop_status", ["pending", "active", "suspended", "closed"]);
-export const shopProductStatusEnum = pgEnum("shop_product_status", ["draft", "active", "paused", "sold_out", "archived"]);
+export const shopProductStatusEnum = pgEnum("shop_product_status", ["draft", "active", "out_of_stock", "discontinued"]);
 export const shopOrderStatusEnum = pgEnum("shop_order_status", ["pending", "paid", "processing", "shipped", "delivered", "cancelled", "refunded", "disputed"]);
 export const shopProductCategoryEnum = pgEnum("shop_product_category", [
   "fashion", "electronics", "beauty", "home", "food", "services", "digital", "collectibles", "other"

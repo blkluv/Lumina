@@ -790,7 +790,7 @@ export default function ShopManage() {
                             onClick={() => {
                               updateProductMutation.mutate({
                                 id: product.id,
-                                status: product.status === "active" ? "inactive" : "active"
+                                status: product.status === "active" ? "draft" : "active"
                               });
                             }}
                             data-testid={`button-toggle-product-${product.id}`}
