@@ -1299,14 +1299,15 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   // Complete chunked upload - streams chunks to storage without loading all into memory
   app.post("/api/objects/chunked-upload/complete", requireAuth, async (req, res) => {
+    const { uploadId } = req.body;
+    let upload: { tempDir: string; contentType: string; totalChunks: number; receivedChunks: Set<number>; userId: string; createdAt: Date; } | undefined = undefined;
+    
     try {
-      const { uploadId } = req.body;
-      
       if (!uploadId) {
         return res.status(400).json({ error: "uploadId is required" });
       }
       
-      const upload = chunkedUploads.get(uploadId);
+      upload = chunkedUploads.get(uploadId);
       if (!upload) {
         return res.status(404).json({ error: "Upload not found" });
       }
@@ -1324,33 +1325,16 @@ export async function registerRoutes(app: Express): Promise<void> {
       
       console.log(`Completing chunked upload: ${upload.totalChunks} chunks`);
       
-      // Combine chunks into a single temp file (streaming, low memory)
-      const combinedPath = path.join(upload.tempDir, 'combined');
-      const writeStream = fs.createWriteStream(combinedPath);
-      
+      // Build ordered list of chunk file paths
+      const chunkPaths: string[] = [];
       for (let i = 0; i < upload.totalChunks; i++) {
-        const chunkPath = path.join(upload.tempDir, `chunk_${i.toString().padStart(6, '0')}`);
-        const chunkData = await fs.promises.readFile(chunkPath);
-        writeStream.write(chunkData);
-        // Delete chunk after writing to free disk space
-        await fs.promises.unlink(chunkPath).catch(() => {});
+        chunkPaths.push(path.join(upload.tempDir, `chunk_${i.toString().padStart(6, '0')}`));
       }
       
-      await new Promise<void>((resolve, reject) => {
-        writeStream.end((err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      
-      // Get file size
-      const stats = await fs.promises.stat(combinedPath);
-      console.log(`Combined file size: ${stats.size} bytes`);
-      
-      // Upload using STREAM to avoid loading entire file into memory
-      // This is critical for production with limited RAM
-      const readStream = fs.createReadStream(combinedPath);
-      const objectPath = await objectStorageService.uploadFromStream(readStream, upload.contentType, stats.size);
+      // Stream chunks directly to cloud storage - NO intermediate combined file
+      // This avoids both memory exhaustion AND temp disk space issues on production
+      // Each chunk is deleted after streaming to free disk space immediately
+      const objectPath = await objectStorageService.uploadFromChunkFiles(chunkPaths, upload.contentType);
       
       // Set ACL to public
       await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
@@ -1358,16 +1342,18 @@ export async function registerRoutes(app: Express): Promise<void> {
         visibility: "public",
       });
       
-      // Clean up temp directory
-      await fs.promises.unlink(combinedPath).catch(() => {});
-      await fs.promises.rmdir(upload.tempDir).catch(() => {});
-      chunkedUploads.delete(uploadId);
-      
       console.log(`Chunked upload complete: ${objectPath}`);
       res.json({ objectPath, success: true });
     } catch (error: any) {
       console.error("Complete chunked upload error:", error);
       res.status(500).json({ error: error.message || "Failed to complete chunked upload" });
+    } finally {
+      // Always clean up temp files and registry entry
+      if (uploadId && upload) {
+        // Use recursive rm to clean up temp directory and any remaining files
+        await fs.promises.rm(upload.tempDir, { recursive: true, force: true }).catch(() => {});
+        chunkedUploads.delete(uploadId);
+      }
     }
   });
 

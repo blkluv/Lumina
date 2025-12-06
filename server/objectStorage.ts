@@ -242,6 +242,100 @@ export class ObjectStorageService {
     return `/objects/uploads/${objectId}`;
   }
 
+  // Upload multiple chunk files directly to GCS - streams chunks sequentially without intermediate file
+  // This avoids both memory exhaustion AND temp disk space issues
+  async uploadFromChunkFiles(
+    chunkPaths: string[],
+    contentType: string
+  ): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+    const objectId = randomUUID();
+    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    
+    // Import fs and stream utilities
+    const fs = await import("fs");
+    const { PassThrough } = await import("stream");
+    const { finished } = await import("stream/promises");
+    
+    // Create GCS write stream with resumable upload
+    const gcsWriteStream = file.createWriteStream({
+      metadata: { contentType },
+      resumable: true,
+    });
+    
+    // Use PassThrough as intermediate to pipe all chunks through
+    const passThrough = new PassThrough();
+    
+    // Track errors from downstream streams to reject chunk processing immediately
+    let downstreamError: Error | null = null;
+    const handleDownstreamError = (err: Error) => {
+      downstreamError = err;
+      passThrough.destroy(err);
+      gcsWriteStream.destroy(err);
+    };
+    
+    // Attach error handlers BEFORE piping
+    passThrough.on("error", handleDownstreamError);
+    gcsWriteStream.on("error", handleDownstreamError);
+    
+    // Start piping to GCS
+    passThrough.pipe(gcsWriteStream);
+    
+    try {
+      // Stream each chunk file sequentially with proper backpressure
+      for (const chunkPath of chunkPaths) {
+        // Check if downstream failed before starting next chunk
+        if (downstreamError) {
+          throw downstreamError;
+        }
+        
+        const chunkStream = fs.createReadStream(chunkPath);
+        
+        // Pipe chunk to passthrough WITHOUT ending it (end: false)
+        chunkStream.pipe(passThrough, { end: false });
+        
+        // Wait for chunk to finish streaming, checking for downstream errors
+        await Promise.race([
+          finished(chunkStream),
+          new Promise<never>((_, reject) => {
+            if (downstreamError) reject(downstreamError);
+            const checkError = setInterval(() => {
+              if (downstreamError) {
+                clearInterval(checkError);
+                reject(downstreamError);
+              }
+            }, 100);
+            chunkStream.once("end", () => clearInterval(checkError));
+            chunkStream.once("error", () => clearInterval(checkError));
+          })
+        ]);
+        
+        // Delete chunk file after streaming to free disk space immediately
+        await fs.promises.unlink(chunkPath).catch(() => {});
+      }
+      
+      // All chunks streamed, close the passthrough to signal completion
+      passThrough.end();
+      
+      // Wait for GCS upload to complete
+      await finished(gcsWriteStream);
+    } catch (error) {
+      // Clean up on error
+      passThrough.destroy();
+      gcsWriteStream.destroy();
+      throw error;
+    }
+    
+    return `/objects/uploads/${objectId}`;
+  }
+
   // Upload file from readable stream to GCS (proxy upload for large files)
   async uploadFromStream(
     inputStream: NodeJS.ReadableStream,
@@ -259,7 +353,7 @@ export class ObjectStorageService {
     const bucket = objectStorageClient.bucket(bucketName);
     const file = bucket.file(objectName);
     
-    // Upload using stream with resumable upload
+    // Upload using stream with resumable upload and proper error handling
     await new Promise<void>((resolve, reject) => {
       const writeStream = file.createWriteStream({
         metadata: {
@@ -268,7 +362,15 @@ export class ObjectStorageService {
         resumable: true,
       });
       
-      writeStream.on("error", reject);
+      // Handle errors from both streams
+      const cleanup = (err: Error) => {
+        (inputStream as any).destroy?.();
+        writeStream.destroy?.();
+        reject(err);
+      };
+      
+      inputStream.on("error", cleanup);
+      writeStream.on("error", cleanup);
       writeStream.on("finish", resolve);
       
       inputStream.pipe(writeStream);
