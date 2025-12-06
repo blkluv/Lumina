@@ -60,8 +60,39 @@ function VideoCard({
   const [showSoundPrompt, setShowSoundPrompt] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
 
   const postUrl = `${window.location.origin}/post/${post.id}`;
+
+  // Fetch signed URL for video playback
+  useEffect(() => {
+    const fetchSignedUrl = async () => {
+      if (!post.mediaUrl || !post.mediaUrl.startsWith("/objects/")) {
+        setVideoSrc(post.mediaUrl);
+        return;
+      }
+      
+      setVideoLoading(true);
+      try {
+        const response = await fetch(`/api/objects/signed-url?path=${encodeURIComponent(post.mediaUrl)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setVideoSrc(data.signedUrl);
+        } else {
+          // Fallback to direct URL if signed URL fails
+          setVideoSrc(post.mediaUrl);
+        }
+      } catch (error) {
+        console.error("Failed to fetch signed URL:", error);
+        setVideoSrc(post.mediaUrl);
+      } finally {
+        setVideoLoading(false);
+      }
+    };
+    
+    fetchSignedUrl();
+  }, [post.mediaUrl]);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -230,16 +261,27 @@ function VideoCard({
   return (
     <>
       <div className="relative w-full h-full bg-black flex items-center justify-center">
-        {post.mediaUrl ? (
+        {videoSrc ? (
           <video
             ref={videoRef}
-            src={post.mediaUrl}
+            src={videoSrc}
             poster={post.thumbnailUrl || undefined}
             loop
             muted={isMuted}
             playsInline
+            preload="metadata"
+            onError={(e) => {
+              const video = e.currentTarget;
+              console.error("Video error:", {
+                error: video.error?.code,
+                message: video.error?.message,
+                src: video.src?.substring(0, 100),
+                networkState: video.networkState,
+                readyState: video.readyState,
+              });
+            }}
+            onLoadedMetadata={() => console.log("Video metadata loaded for post:", post.id)}
             onClick={(e) => {
-              // Only toggle play if click is in the left 80% of the video (not on action buttons)
               const rect = e.currentTarget.getBoundingClientRect();
               const clickX = e.clientX - rect.left;
               const width = rect.width;
@@ -250,6 +292,10 @@ function VideoCard({
             className="w-full h-full object-contain cursor-pointer"
             data-testid={`video-${post.id}`}
           />
+        ) : videoLoading ? (
+          <div className="flex items-center justify-center text-white/50">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
         ) : (
           <div className="flex items-center justify-center text-white/50">
             <p>No video available</p>

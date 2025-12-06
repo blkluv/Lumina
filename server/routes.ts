@@ -1483,10 +1483,40 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/objects/signed-url", async (req, res) => {
+    try {
+      const objectPath = req.query.path as string;
+      if (!objectPath) {
+        return res.status(400).json({ error: "path parameter is required" });
+      }
+      
+      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+      
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        userId: req.session?.userId,
+        objectFile,
+      });
+
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const signedUrl = await objectStorageService.getSignedReadURL(objectFile, 3600);
+      res.json({ signedUrl });
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      console.error("Signed URL error:", error);
+      res.status(500).json({ error: "Failed to get signed URL" });
+    }
+  });
+
   app.get("/objects/*", async (req, res) => {
     try {
       const wildcardParam = (req.params as Record<string, string>)[0];
       const objectPath = `/objects/${wildcardParam}`;
+      console.log(`Object request: ${objectPath}, Range: ${req.headers.range || 'none'}, Accept: ${req.headers.accept}`);
       const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
       
       const canAccess = await objectStorageService.canAccessObjectEntity({

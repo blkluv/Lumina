@@ -121,7 +121,7 @@ export class ObjectStorageService {
       // Check if this is a range request (needed for video seeking)
       const rangeHeader = req?.headers?.range;
       
-      if (rangeHeader && contentType.startsWith("video/")) {
+      if (rangeHeader) {
         // Parse range header: "bytes=start-end"
         const parts = rangeHeader.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
@@ -142,10 +142,12 @@ export class ObjectStorageService {
           "Content-Length": chunkSize,
           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
           "Accept-Ranges": "bytes",
+          "Content-Encoding": "identity",
           "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
         });
         
-        const stream = file.createReadStream({ start, end });
+        // Use decompress: false to ensure we send exact bytes without GCS decompression
+        const stream = file.createReadStream({ start, end, decompress: false });
         stream.on("error", (err) => {
           console.error("Stream error:", err);
           if (!res.headersSent) {
@@ -159,9 +161,11 @@ export class ObjectStorageService {
           "Content-Type": contentType,
           "Content-Length": fileSize,
           "Accept-Ranges": "bytes",
+          "Content-Encoding": "identity",
           "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
         });
-        const stream = file.createReadStream();
+        // Use decompress: false to ensure we send exact bytes without GCS decompression
+        const stream = file.createReadStream({ decompress: false });
         stream.on("error", (err) => {
           console.error("Stream error:", err);
           if (!res.headersSent) {
@@ -219,6 +223,18 @@ export class ObjectStorageService {
       throw new ObjectNotFoundError();
     }
     return objectFile;
+  }
+
+  async getSignedReadURL(file: File, ttlSec: number = 3600): Promise<string> {
+    // file.name is just the object name, file.bucket.name is the bucket name
+    const bucketName = file.bucket.name;
+    const objectName = file.name;
+    return signObjectURL({
+      bucketName,
+      objectName,
+      method: "GET",
+      ttlSec,
+    });
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
