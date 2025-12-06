@@ -1347,9 +1347,10 @@ export async function registerRoutes(app: Express): Promise<void> {
       const stats = await fs.promises.stat(combinedPath);
       console.log(`Combined file size: ${stats.size} bytes`);
       
-      // Upload from file stream to storage
-      const fileBuffer = await fs.promises.readFile(combinedPath);
-      const objectPath = await objectStorageService.uploadFromBuffer(fileBuffer, upload.contentType);
+      // Upload using STREAM to avoid loading entire file into memory
+      // This is critical for production with limited RAM
+      const readStream = fs.createReadStream(combinedPath);
+      const objectPath = await objectStorageService.uploadFromStream(readStream, upload.contentType, stats.size);
       
       // Set ACL to public
       await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
