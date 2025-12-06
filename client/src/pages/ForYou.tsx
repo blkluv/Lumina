@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import Hls from "hls.js";
 import { Heart, MessageCircle, Share2, Coins, User, Play, Pause, Volume2, VolumeX, ChevronUp, ChevronDown, Sparkles, Award, Loader2, Copy, Check, Twitter, Facebook, Link as LinkIcon, Trash2, MoreVertical } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
@@ -62,12 +63,22 @@ function VideoCard({
   const [isDeleting, setIsDeleting] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [useHls, setUseHls] = useState(false);
+  const hlsRef = useRef<Hls | null>(null);
 
   const postUrl = `${window.location.origin}/post/${post.id}`;
 
-  // Fetch signed URL for video playback
+  // Check if HLS URL is available and set up video source
   useEffect(() => {
-    const fetchSignedUrl = async () => {
+    const setupVideoSource = async () => {
+      // If post has an HLS URL, use that
+      if ((post as any).hlsUrl) {
+        setVideoSrc((post as any).hlsUrl);
+        setUseHls(true);
+        return;
+      }
+      
+      // Otherwise fall back to direct video URL
       if (!post.mediaUrl || !post.mediaUrl.startsWith("/objects/")) {
         setVideoSrc(post.mediaUrl);
         return;
@@ -80,7 +91,6 @@ function VideoCard({
           const data = await response.json();
           setVideoSrc(data.signedUrl);
         } else {
-          // Fallback to direct URL if signed URL fails
           setVideoSrc(post.mediaUrl);
         }
       } catch (error) {
@@ -91,8 +101,57 @@ function VideoCard({
       }
     };
     
-    fetchSignedUrl();
-  }, [post.mediaUrl]);
+    setupVideoSource();
+  }, [post.mediaUrl, (post as any).hlsUrl]);
+
+  // Initialize HLS.js for HLS streams
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoSrc || !useHls) return;
+
+    // Clean up previous HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+      });
+
+      hlsRef.current = hls;
+      hls.loadSource(videoSrc);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log("HLS manifest parsed for post:", post.id);
+        setVideoLoading(false);
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error("HLS error:", data);
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          }
+        }
+      });
+
+      return () => {
+        hls.destroy();
+        hlsRef.current = null;
+      };
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari native HLS support
+      video.src = videoSrc;
+    }
+  }, [videoSrc, useHls, post.id]);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -264,7 +323,7 @@ function VideoCard({
         {videoSrc ? (
           <video
             ref={videoRef}
-            src={videoSrc}
+            src={useHls ? undefined : videoSrc}
             poster={post.thumbnailUrl || undefined}
             loop
             muted={isMuted}

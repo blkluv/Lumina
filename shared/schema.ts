@@ -137,6 +137,7 @@ export const posts = pgTable("posts", {
   content: text("content"),
   postType: postTypeEnum("post_type").notNull().default("text"),
   mediaUrl: text("media_url"),
+  hlsUrl: text("hls_url"),
   thumbnailUrl: text("thumbnail_url"),
   videoDuration: integer("video_duration"),
   visibility: postVisibilityEnum("visibility").notNull().default("public"),

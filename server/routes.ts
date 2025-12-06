@@ -192,6 +192,7 @@ import {
   shops,
   liveStreams,
   nftListings,
+  posts,
   type User,
 } from "@shared/schema";
 import { db } from "./db";
@@ -823,6 +824,50 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error) {
       console.error("Create post error:", error);
       res.status(500).json({ error: "Failed to create post" });
+    }
+  });
+
+  // Trigger HLS transcoding for a video post
+  app.post("/api/posts/:id/transcode-hls", requireAuth, async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const userId = req.session.userId!;
+
+      const post = await storage.getPost(postId);
+      if (!post) {
+        return res.status(404).json({ error: "Post not found" });
+      }
+
+      if (post.authorId !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      if (post.postType !== "video" || !post.mediaUrl) {
+        return res.status(400).json({ error: "Post is not a video post" });
+      }
+
+      if (post.hlsUrl) {
+        return res.json({ hlsUrl: post.hlsUrl, message: "Already transcoded" });
+      }
+
+      // Import the HLS transcoding module
+      const { transcodeVideoToHLS } = await import("./hlsTranscode");
+
+      console.log(`[HLS] Starting transcode for post ${postId}`);
+      const result = await transcodeVideoToHLS(post.mediaUrl, userId);
+
+      // Update the post with the HLS manifest URL
+      await db.update(posts).set({ hlsUrl: result.manifestPath }).where(eq(posts.id, postId));
+
+      console.log(`[HLS] Transcode complete for post ${postId}: ${result.manifestPath}`);
+      res.json({ 
+        hlsUrl: result.manifestPath, 
+        duration: result.duration,
+        segmentCount: result.segmentPaths.length 
+      });
+    } catch (error) {
+      console.error("HLS transcode error:", error);
+      res.status(500).json({ error: "Failed to transcode video" });
     }
   });
 
