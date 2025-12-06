@@ -86,17 +86,17 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
   const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Allow up to 500MB for 3-minute videos
-      if (file.size > 500 * 1024 * 1024) {
+      // Allow up to 2GB for longer videos
+      if (file.size > 2 * 1024 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: "Videos must be under 500MB",
+          description: "Videos must be under 2GB",
           variant: "destructive",
         });
         return;
       }
       
-      // Validate video duration (max 3 minutes = 180 seconds)
+      // Validate video duration (max 10 minutes = 600 seconds)
       const video = document.createElement("video");
       video.preload = "metadata";
       
@@ -115,10 +115,10 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       
       try {
         const duration = await durationPromise;
-        if (duration > 180) {
+        if (duration > 600) {
           toast({
             title: "Video too long",
-            description: "Videos must be 3 minutes or less",
+            description: "Videos must be 10 minutes or less",
             variant: "destructive",
           });
           return;
@@ -174,7 +174,49 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     }
   };
 
-  // Proxy upload for videos - goes through server to avoid browser CORS/timeout issues
+  // Direct resumable upload for large videos - bypasses server limits
+  const uploadResumable = async (file: File): Promise<string> => {
+    // Get resumable upload session from server
+    const response = await apiRequest("POST", "/api/objects/resumable-upload", {
+      contentType: file.type,
+    });
+    const { resumableUri, objectPath } = await response.json();
+    
+    // Upload directly to cloud storage with progress tracking
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(percent);
+        }
+      });
+      
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(objectPath);
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
+      
+      xhr.addEventListener("error", () => {
+        reject(new Error("Upload failed - please check your connection and try again"));
+      });
+      
+      xhr.addEventListener("timeout", () => {
+        reject(new Error("Upload timed out - please try again"));
+      });
+      
+      xhr.open("PUT", resumableUri);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.timeout = 1800000; // 30 minutes timeout for large files
+      xhr.send(file);
+    });
+  };
+
+  // Proxy upload for smaller videos - goes through server
   const uploadViaProxy = async (file: File): Promise<string> => {
     // Get CSRF token before starting upload
     const csrfToken = await getCsrfToken();
@@ -284,7 +326,18 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     setIsUploading(true);
     
     try {
-      const videoPath = await uploadViaProxy(mediaFile);
+      // Use direct resumable upload for files over 50MB to bypass server limits
+      const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
+      let videoPath: string;
+      
+      if (mediaFile.size > LARGE_FILE_THRESHOLD) {
+        // Large file - upload directly to cloud storage
+        videoPath = await uploadResumable(mediaFile);
+      } else {
+        // Smaller file - use proxy upload
+        videoPath = await uploadViaProxy(mediaFile);
+      }
+      
       setUploadedVideoPath(videoPath);
       setShowThumbnailSelector(true);
       
@@ -366,9 +419,14 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       
       if (mediaFile && !mediaUrl) {
         setIsUploading(true);
-        // Use proxy upload for videos (server-side resumable), direct for images
         if (mediaType === "video") {
-          mediaUrl = await uploadViaProxy(mediaFile);
+          // Use direct resumable upload for files over 50MB to bypass server limits
+          const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
+          if (mediaFile.size > LARGE_FILE_THRESHOLD) {
+            mediaUrl = await uploadResumable(mediaFile);
+          } else {
+            mediaUrl = await uploadViaProxy(mediaFile);
+          }
         } else {
           mediaUrl = await uploadDirect(mediaFile);
         }
