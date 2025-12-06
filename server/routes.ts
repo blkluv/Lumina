@@ -6,11 +6,11 @@ import multer from "multer";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
-// Configure multer for file uploads (500MB limit for videos)
+// Configure multer for file uploads (2GB limit for long videos)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 500 * 1024 * 1024, // 500MB
+    fileSize: 2 * 1024 * 1024 * 1024, // 2GB for videos over 3 minutes
   },
   fileFilter: (_req, file, cb) => {
     // Only allow video and image MIME types
@@ -26,10 +26,10 @@ const upload = multer({
   },
 });
 
-// Rate limiter for upload proxy (stricter to prevent abuse)
+// Rate limiter for upload proxy (allows more uploads for creators)
 const uploadLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 uploads per minute
+  max: 10, // 10 uploads per minute
   message: { error: "Too many uploads, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
