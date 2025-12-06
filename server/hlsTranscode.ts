@@ -79,7 +79,7 @@ async function transcodeToHLS(
       "-b:a", "128k",
       "-ac", "2",
       "-ar", "44100",
-      "-vf", "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease",
+      "-vf", "scale='trunc(min(1280,iw)/2)*2':'trunc(min(720,ih)/2)*2':force_original_aspect_ratio=decrease,pad=ceil(iw/2)*2:ceil(ih/2)*2",
       "-profile:v", "main",
       "-level", "3.1",
       "-start_number", "0",
