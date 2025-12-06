@@ -174,46 +174,66 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     }
   };
 
-  // Direct resumable upload for large videos - bypasses server limits
-  const uploadResumable = async (file: File): Promise<string> => {
-    // Get resumable upload session from server
-    const response = await apiRequest("POST", "/api/objects/resumable-upload", {
-      contentType: file.type,
-    });
-    const { resumableUri, objectPath } = await response.json();
+  // Chunked upload for large videos - uploads in smaller pieces to bypass size limits
+  const uploadChunked = async (file: File): Promise<string> => {
+    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const csrfToken = await getCsrfToken();
     
-    // Upload directly to cloud storage with progress tracking
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          setUploadProgress(percent);
-        }
-      });
-      
-      xhr.addEventListener("load", () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(objectPath);
-        } else {
-          reject(new Error(`Upload failed with status ${xhr.status}`));
-        }
-      });
-      
-      xhr.addEventListener("error", () => {
-        reject(new Error("Upload failed - please check your connection and try again"));
-      });
-      
-      xhr.addEventListener("timeout", () => {
-        reject(new Error("Upload timed out - please try again"));
-      });
-      
-      xhr.open("PUT", resumableUri);
-      xhr.setRequestHeader("Content-Type", file.type);
-      xhr.timeout = 1800000; // 30 minutes timeout for large files
-      xhr.send(file);
+    // First, initialize the upload and get an upload ID
+    const initResponse = await apiRequest("POST", "/api/objects/chunked-upload/init", {
+      contentType: file.type,
+      totalSize: file.size,
+      totalChunks,
     });
+    const { uploadId, objectPath } = await initResponse.json();
+    
+    // Upload each chunk
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const start = chunkIndex * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      
+      const formData = new FormData();
+      formData.append("chunk", chunk);
+      formData.append("uploadId", uploadId);
+      formData.append("chunkIndex", String(chunkIndex));
+      formData.append("totalChunks", String(totalChunks));
+      
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            // Update progress based on chunks completed
+            const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+            setUploadProgress(progress);
+            resolve();
+          } else {
+            reject(new Error(`Chunk upload failed with status ${xhr.status}`));
+          }
+        });
+        
+        xhr.addEventListener("error", () => {
+          reject(new Error("Upload failed - please check your connection"));
+        });
+        
+        xhr.open("POST", "/api/objects/chunked-upload/chunk");
+        xhr.withCredentials = true;
+        if (csrfToken) {
+          xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+        }
+        xhr.timeout = 120000; // 2 minutes per chunk
+        xhr.send(formData);
+      });
+    }
+    
+    // Finalize the upload
+    await apiRequest("POST", "/api/objects/chunked-upload/complete", {
+      uploadId,
+    });
+    
+    return objectPath;
   };
 
   // Proxy upload for smaller videos - goes through server
@@ -326,13 +346,13 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     setIsUploading(true);
     
     try {
-      // Use direct resumable upload for files over 50MB to bypass server limits
+      // Use chunked upload for files over 50MB to bypass server limits
       const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
       let videoPath: string;
       
       if (mediaFile.size > LARGE_FILE_THRESHOLD) {
-        // Large file - upload directly to cloud storage
-        videoPath = await uploadResumable(mediaFile);
+        // Large file - use chunked upload
+        videoPath = await uploadChunked(mediaFile);
       } else {
         // Smaller file - use proxy upload
         videoPath = await uploadViaProxy(mediaFile);
@@ -420,10 +440,10 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       if (mediaFile && !mediaUrl) {
         setIsUploading(true);
         if (mediaType === "video") {
-          // Use direct resumable upload for files over 50MB to bypass server limits
+          // Use chunked upload for files over 50MB to bypass server limits
           const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
           if (mediaFile.size > LARGE_FILE_THRESHOLD) {
-            mediaUrl = await uploadResumable(mediaFile);
+            mediaUrl = await uploadChunked(mediaFile);
           } else {
             mediaUrl = await uploadViaProxy(mediaFile);
           }

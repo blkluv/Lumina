@@ -1176,6 +1176,148 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Chunked upload storage - tracks in-progress uploads
+  const chunkedUploads = new Map<string, {
+    chunks: Map<number, Buffer>;
+    contentType: string;
+    totalChunks: number;
+    objectPath: string;
+    userId: string;
+    createdAt: Date;
+  }>();
+
+  // Clean up old chunked uploads (older than 1 hour)
+  setInterval(() => {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    for (const [uploadId, upload] of chunkedUploads) {
+      if (upload.createdAt < oneHourAgo) {
+        chunkedUploads.delete(uploadId);
+      }
+    }
+  }, 5 * 60 * 1000); // Check every 5 minutes
+
+  // Initialize chunked upload
+  app.post("/api/objects/chunked-upload/init", requireAuth, async (req, res) => {
+    try {
+      const { contentType, totalChunks } = req.body;
+      if (!contentType || !totalChunks) {
+        return res.status(400).json({ error: "contentType and totalChunks are required" });
+      }
+      
+      const uploadId = crypto.randomUUID();
+      const objectId = crypto.randomUUID();
+      const objectPath = `/objects/uploads/${objectId}`;
+      
+      chunkedUploads.set(uploadId, {
+        chunks: new Map(),
+        contentType,
+        totalChunks,
+        objectPath,
+        userId: req.session.userId!,
+        createdAt: new Date(),
+      });
+      
+      res.json({ uploadId, objectPath });
+    } catch (error: any) {
+      console.error("Chunked upload init error:", error);
+      res.status(500).json({ error: error.message || "Failed to initialize chunked upload" });
+    }
+  });
+
+  // Upload a chunk (using smaller multer limit for chunks)
+  const chunkUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 15 * 1024 * 1024 }, // 15MB per chunk
+  });
+
+  app.post("/api/objects/chunked-upload/chunk", requireAuth, chunkUpload.single("chunk"), async (req, res) => {
+    try {
+      const { uploadId, chunkIndex } = req.body;
+      
+      if (!uploadId || chunkIndex === undefined) {
+        return res.status(400).json({ error: "uploadId and chunkIndex are required" });
+      }
+      
+      const upload = chunkedUploads.get(uploadId);
+      if (!upload) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+      
+      if (upload.userId !== req.session.userId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "No chunk data provided" });
+      }
+      
+      upload.chunks.set(parseInt(chunkIndex), req.file.buffer);
+      
+      res.json({ success: true, chunksReceived: upload.chunks.size });
+    } catch (error: any) {
+      console.error("Chunk upload error:", error);
+      res.status(500).json({ error: error.message || "Failed to upload chunk" });
+    }
+  });
+
+  // Complete chunked upload - combine chunks and upload to storage
+  app.post("/api/objects/chunked-upload/complete", requireAuth, async (req, res) => {
+    try {
+      const { uploadId } = req.body;
+      
+      if (!uploadId) {
+        return res.status(400).json({ error: "uploadId is required" });
+      }
+      
+      const upload = chunkedUploads.get(uploadId);
+      if (!upload) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+      
+      if (upload.userId !== req.session.userId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      // Verify all chunks received
+      if (upload.chunks.size !== upload.totalChunks) {
+        return res.status(400).json({ 
+          error: `Missing chunks: received ${upload.chunks.size} of ${upload.totalChunks}` 
+        });
+      }
+      
+      // Combine chunks in order
+      const sortedChunks: Buffer[] = [];
+      for (let i = 0; i < upload.totalChunks; i++) {
+        const chunk = upload.chunks.get(i);
+        if (!chunk) {
+          return res.status(400).json({ error: `Missing chunk ${i}` });
+        }
+        sortedChunks.push(chunk);
+      }
+      
+      const combinedBuffer = Buffer.concat(sortedChunks);
+      console.log(`Completing chunked upload: ${upload.totalChunks} chunks, ${combinedBuffer.length} bytes total`);
+      
+      // Upload to storage
+      const objectPath = await objectStorageService.uploadFromBuffer(combinedBuffer, upload.contentType);
+      
+      // Set ACL to public
+      await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+        owner: req.session.userId!,
+        visibility: "public",
+      });
+      
+      // Clean up
+      chunkedUploads.delete(uploadId);
+      
+      console.log(`Chunked upload complete: ${objectPath}`);
+      res.json({ objectPath, success: true });
+    } catch (error: any) {
+      console.error("Complete chunked upload error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete chunked upload" });
+    }
+  });
+
   // Proxy upload endpoint - uploads through server to avoid browser CORS/timeout issues
   // Uses rate limiting and auth to prevent abuse
   app.post("/api/objects/upload-proxy", requireAuth, uploadLimiter, (req, res, next) => {
