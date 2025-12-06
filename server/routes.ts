@@ -186,6 +186,9 @@ import {
   moderationActions,
   moderationQueue,
   contentAppeals,
+  shops,
+  liveStreams,
+  nftListings,
   type User,
 } from "@shared/schema";
 import { db } from "./db";
@@ -6440,128 +6443,233 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(403).json({ error: "Business account required" });
       }
 
-      const { posts } = await storage.getPosts({ authorId: req.session.userId!, limit: 50 });
-      const followerCount = await storage.getFollowerCount(req.session.userId!);
+      const userId = req.session.userId!;
       
+      // Get real posts data
+      const { posts } = await storage.getPosts({ authorId: userId, limit: 100 });
+      const followerCount = await storage.getFollowerCount(userId);
+      
+      // Calculate real metrics from posts
       const totalLikes = posts.reduce((sum: number, p) => sum + (p.likeCount || 0), 0);
       const totalComments = posts.reduce((sum: number, p) => sum + (p.commentCount || 0), 0);
       const totalViews = posts.reduce((sum: number, p) => sum + (p.viewCount || 0), 0);
+      const totalShares = posts.reduce((sum: number, p) => sum + (p.shareCount || 0), 0);
 
-      const reachRate = followerCount > 0 ? Math.min(100, Math.round((totalViews / followerCount) * 100) / 100) : 67.5;
-      const engagementRate = totalViews > 0 ? Math.min(100, Math.round(((totalLikes + totalComments) / totalViews) * 1000) / 10) : 4.8;
+      // Calculate real engagement metrics
+      const reachRate = followerCount > 0 ? Math.min(100, Math.round((totalViews / followerCount) * 100) / 100) : 0;
+      const engagementRate = totalViews > 0 ? Math.min(100, Math.round(((totalLikes + totalComments) / totalViews) * 1000) / 10) : 0;
 
-      const dashboard = {
-        overview: {
-          totalProfileViews: totalViews || 12847,
-          totalImpressions: (totalViews * 3) || 45230,
-          totalEngagements: (totalLikes + totalComments) || 3421,
-          totalFollowers: followerCount || 1234,
-          followerGrowth: Math.floor(Math.random() * 20) + 5,
-          websiteClicks: Math.floor(Math.random() * 100) + 50,
-          phoneClicks: Math.floor(Math.random() * 30) + 10,
-          emailClicks: Math.floor(Math.random() * 50) + 20,
-          directMessages: Math.floor(Math.random() * 80) + 30,
-          reachRate: reachRate,
-          engagementRate: engagementRate,
-        },
-        weeklyTrend: [
-          { date: "Mon", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-          { date: "Tue", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-          { date: "Wed", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-          { date: "Thu", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-          { date: "Fri", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-          { date: "Sat", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-          { date: "Sun", views: Math.floor(Math.random() * 1000) + 500, engagements: Math.floor(Math.random() * 200) + 100, followers: Math.floor(Math.random() * 20) + 5, reach: Math.floor(Math.random() * 800) + 400 },
-        ],
-        contentPerformance: posts.slice(0, 4).map((p, i) => ({
+      // Get real scheduled posts
+      const scheduledPosts = await storage.getScheduledPosts(userId);
+      
+      // Get real shop data for revenue (if user owns any shops)
+      const userShops = await db.select().from(shops).where(eq(shops.ownerId, userId));
+      
+      // Get real shop orders for revenue calculation
+      let shopRevenue = 0;
+      let shopOrderCount = 0;
+      const shopOrdersList: any[] = [];
+      
+      for (const shop of userShops) {
+        const shopOrders = await storage.getShopOrders({ shopId: shop.id, limit: 100 });
+        const completedOrders = shopOrders.filter((o: any) => o.status === 'paid' || o.status === 'delivered');
+        shopRevenue += completedOrders.reduce((sum: number, o: any) => sum + parseFloat(o.sellerReceivesAxm || '0'), 0);
+        shopOrderCount += completedOrders.length;
+        shopOrdersList.push(...completedOrders);
+      }
+
+      // Get real tips received from live streams (user as host)
+      const userStreams = await db.select().from(liveStreams).where(eq(liveStreams.hostId, userId));
+      let totalTipsReceived = 0;
+      let tipTransactionCount = 0;
+      
+      for (const stream of userStreams) {
+        totalTipsReceived += parseFloat(stream.totalTips || '0');
+        tipTransactionCount += stream.tipCount || 0;
+      }
+
+      // Get real transactions where user received tips/donations
+      const incomingTransactions = await db
+        .select()
+        .from(transactions)
+        .where(and(
+          eq(transactions.toUserId, userId),
+          eq(transactions.status, 'confirmed')
+        ))
+        .orderBy(desc(transactions.createdAt))
+        .limit(100);
+
+      const tipTransactions = incomingTransactions.filter((t: any) => t.type === 'tip');
+      const donationTransactions = incomingTransactions.filter((t: any) => t.type === 'donation');
+      
+      const totalTips = tipTransactions.reduce((sum: number, t: any) => sum + parseFloat(t.amount || '0'), 0) + totalTipsReceived;
+      const totalDonations = donationTransactions.reduce((sum: number, t: any) => sum + parseFloat(t.amount || '0'), 0);
+
+      // Get real NFT sales (NFT is sold when soldAt is not null)
+      const userNftListings = await db
+        .select()
+        .from(nftListings)
+        .where(and(
+          eq(nftListings.sellerId, userId),
+          sql`${nftListings.soldAt} IS NOT NULL`
+        ));
+      
+      const nftSalesTotal = userNftListings.reduce((sum: number, l: any) => sum + parseFloat(l.priceAxm || '0'), 0);
+      const nftSalesCount = userNftListings.length;
+
+      // Get real subscription revenue
+      const userSubscriptions = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.creatorId, userId));
+      
+      const activeSubscriptions = userSubscriptions.filter((s: any) => s.status === 'active');
+      const subscriptionRevenue = activeSubscriptions.reduce((sum: number, s: any) => sum + parseFloat(s.price || '0'), 0);
+
+      // Get real messages for response metrics
+      const conversations = await storage.getConversations(userId);
+      const unreadCount = await storage.getUnreadMessageCount(userId);
+
+      // Build real weekly trend from posts created in last 7 days
+      const now = new Date();
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const weeklyTrend = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        const dayStart = new Date(date.setHours(0, 0, 0, 0));
+        const dayEnd = new Date(date.setHours(23, 59, 59, 999));
+        
+        const dayPosts = posts.filter((p: any) => {
+          const postDate = new Date(p.createdAt);
+          return postDate >= dayStart && postDate <= dayEnd;
+        });
+        
+        const dayViews = dayPosts.reduce((sum: number, p: any) => sum + (p.viewCount || 0), 0);
+        const dayEngagements = dayPosts.reduce((sum: number, p: any) => sum + (p.likeCount || 0) + (p.commentCount || 0), 0);
+        
+        weeklyTrend.push({
+          date: dayNames[dayStart.getDay()],
+          views: dayViews,
+          engagements: dayEngagements,
+          followers: 0, // Would need follower history tracking
+          reach: dayViews,
+        });
+      }
+
+      // Calculate total revenue
+      const totalRevenue = totalTips + totalDonations + subscriptionRevenue + nftSalesTotal + shopRevenue;
+
+      // Build real monthly trend from last 5 months
+      const monthlyTrend = [];
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      for (let i = 4; i >= 0; i--) {
+        const monthDate = new Date();
+        monthDate.setMonth(monthDate.getMonth() - i);
+        const monthName = monthNames[monthDate.getMonth()];
+        
+        // For now, show current totals for current month, 0 for past months
+        // Real implementation would need historical data tracking
+        if (i === 0) {
+          monthlyTrend.push({
+            month: monthName,
+            revenue: totalRevenue,
+            tips: totalTips,
+            donations: totalDonations,
+          });
+        } else {
+          monthlyTrend.push({
+            month: monthName,
+            revenue: 0,
+            tips: 0,
+            donations: 0,
+          });
+        }
+      }
+
+      // Build real content performance from actual posts
+      const contentPerformance = posts.slice(0, 10).map((p: any) => {
+        const postViews = p.viewCount || 0;
+        const postEngagement = postViews > 0 ? ((p.likeCount || 0) + (p.commentCount || 0)) / postViews * 100 : 0;
+        
+        return {
           id: p.id,
           type: p.postType === "video" ? "reel" : "post",
           thumbnail: p.mediaUrl || undefined,
-          caption: p.content?.substring(0, 100) || "No caption",
-          reach: (p.viewCount || 0) + Math.floor(Math.random() * 5000),
-          impressions: ((p.viewCount || 0) * 2) + Math.floor(Math.random() * 10000),
-          engagement: Math.round(Math.random() * 100) / 10,
+          caption: p.content?.substring(0, 100) || "",
+          reach: postViews,
+          impressions: postViews,
+          engagement: Math.round(postEngagement * 10) / 10,
           likes: p.likeCount || 0,
           comments: p.commentCount || 0,
-          shares: Math.floor(Math.random() * 100),
-          saves: Math.floor(Math.random() * 200),
-          watchTime: p.postType === "video" ? Math.floor(Math.random() * 120) + 30 : undefined,
-          completionRate: p.postType === "video" ? Math.floor(Math.random() * 40) + 50 : undefined,
+          shares: p.shareCount || 0,
+          saves: 0, // Would need save tracking
+          watchTime: p.postType === "video" ? (p.duration || 0) : undefined,
+          completionRate: p.postType === "video" ? 0 : undefined,
           createdAt: p.createdAt?.toISOString() || new Date().toISOString(),
-        })),
+        };
+      });
+
+      // Build real revenue streams
+      const revenueStreams = [
+        { source: "Tips", amount: totalTips, transactions: tipTransactionCount + tipTransactions.length, growth: 0 },
+        { source: "Donations", amount: totalDonations, transactions: donationTransactions.length, growth: 0 },
+        { source: "Subscriptions", amount: subscriptionRevenue, transactions: activeSubscriptions.length, growth: 0 },
+        { source: "NFT Sales", amount: nftSalesTotal, transactions: nftSalesCount, growth: 0 },
+        { source: "Shop Sales", amount: shopRevenue, transactions: shopOrderCount, growth: 0 },
+      ].filter(s => s.amount > 0 || s.transactions > 0);
+
+      const dashboard = {
+        overview: {
+          totalProfileViews: totalViews,
+          totalImpressions: totalViews,
+          totalEngagements: totalLikes + totalComments,
+          totalFollowers: followerCount,
+          followerGrowth: 0, // Would need historical tracking
+          websiteClicks: 0, // Would need click tracking
+          phoneClicks: 0,
+          emailClicks: 0,
+          directMessages: conversations.length,
+          reachRate,
+          engagementRate,
+        },
+        weeklyTrend,
+        contentPerformance,
         topPosts: posts.slice(0, 5),
-        promotions: [],
-        scheduledPosts: [],
-        leads: [],
-        advocacyActions: [],
-        messageTemplates: [
-          { id: "1", name: "Welcome Message", content: "Thank you for reaching out! We'll get back to you within 24 hours.", category: "auto-reply", usageCount: 234 },
-          { id: "2", name: "Follow-up", content: "Hi! Just following up on our previous conversation. Do you have any questions?", category: "sales", usageCount: 156 },
-          { id: "3", name: "Thank You", content: "Thank you for your support! We truly appreciate it.", category: "general", usageCount: 89 },
-        ],
-        competitors: [
-          { id: "1", name: "Competitor One", username: "competitor1", followers: 15600, posts: 234, engagement: 5.2, growth: 8.5 },
-          { id: "2", name: "Industry Leader", username: "industryleader", followers: 89000, posts: 567, engagement: 3.8, growth: 2.1 },
-          { id: "3", name: "Rising Star", username: "risingstar", followers: 8900, posts: 123, engagement: 7.4, growth: 15.3 },
-        ],
+        promotions: [], // Empty - no demo data, would need real promotions table
+        scheduledPosts: scheduledPosts.map((sp: any) => ({
+          id: sp.id,
+          content: sp.content,
+          mediaUrl: sp.mediaUrl,
+          scheduledFor: sp.scheduledFor?.toISOString(),
+          postType: sp.postType,
+          status: sp.status,
+        })),
+        leads: [], // Empty - no demo data, would need real leads table
+        advocacyActions: [], // Empty - no demo data
+        messageTemplates: [], // Empty - no demo data, would need real templates table
+        competitors: [], // Empty - no demo data, competitors should be user-added
         revenue: {
-          total: 12450,
-          streams: [
-            { source: "Tips", amount: 4500, transactions: 234, growth: 12 },
-            { source: "Donations", amount: 3200, transactions: 89, growth: 8 },
-            { source: "Subscriptions", amount: 2800, transactions: 56, growth: 15 },
-            { source: "NFT Sales", amount: 1950, transactions: 23, growth: 25 },
-          ],
-          monthlyTrend: [
-            { month: "Jul", revenue: 8200, tips: 3100, donations: 2400 },
-            { month: "Aug", revenue: 9800, tips: 3800, donations: 2800 },
-            { month: "Sep", revenue: 10500, tips: 4000, donations: 3000 },
-            { month: "Oct", revenue: 11200, tips: 4200, donations: 3100 },
-            { month: "Nov", revenue: 12450, tips: 4500, donations: 3200 },
-          ],
+          total: totalRevenue,
+          streams: revenueStreams,
+          monthlyTrend,
         },
         audienceInsights: {
-          demographics: [
-            { label: "18-24", value: 25, color: "#22c55e" },
-            { label: "25-34", value: 35, color: "#3b82f6" },
-            { label: "35-44", value: 22, color: "#a855f7" },
-            { label: "45-54", value: 12, color: "#f59e0b" },
-            { label: "55+", value: 6, color: "#ef4444" },
-          ],
-          genderSplit: [
-            { label: "Male", value: 48, color: "#3b82f6" },
-            { label: "Female", value: 45, color: "#ec4899" },
-            { label: "Other", value: 7, color: "#8b5cf6" },
-          ],
-          bestPostingTimes: Array.from({ length: 15 }, (_, i) => ({
-            hour: 8 + i,
-            engagement: Math.floor(Math.random() * 60) + 40,
-          })),
-          topLocations: [
-            { location: "United States", percentage: 45 },
-            { location: "United Kingdom", percentage: 18 },
-            { location: "Canada", percentage: 12 },
-            { location: "Australia", percentage: 8 },
-            { location: "Germany", percentage: 6 },
-          ],
-          interests: [
-            { interest: "Technology", percentage: 68 },
-            { interest: "Finance", percentage: 54 },
-            { interest: "Education", percentage: 47 },
-            { interest: "Health", percentage: 38 },
-            { interest: "Entertainment", percentage: 32 },
-          ],
-          deviceTypes: [
-            { device: "Mobile", percentage: 72 },
-            { device: "Desktop", percentage: 24 },
-            { device: "Tablet", percentage: 4 },
-          ],
+          // Empty arrays - no demo data, would need real analytics tracking
+          demographics: [],
+          genderSplit: [],
+          bestPostingTimes: [],
+          topLocations: [],
+          interests: [],
+          deviceTypes: [],
         },
         responseMetrics: {
-          averageResponseTime: 45,
-          responseRate: 94,
-          unreadMessages: 12,
-          totalConversations: 234,
+          averageResponseTime: 0, // Would need message timestamp tracking
+          responseRate: 0,
+          unreadMessages: unreadCount,
+          totalConversations: conversations.length,
         },
       };
 
