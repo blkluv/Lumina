@@ -107,6 +107,8 @@ export async function createDirectUpload(corsOrigin: string = "*"): Promise<MuxD
     new_asset_settings: {
       playback_policy: ["public"],
       video_quality: "basic",
+      // Enable static MP4 renditions for social media sharing
+      mp4_support: "standard",
     },
   });
 
@@ -159,6 +161,12 @@ export function getPlaybackUrl(playbackId: string): string {
   return `https://stream.mux.com/${playbackId}.m3u8`;
 }
 
+export function getMp4Url(playbackId: string): string {
+  // Static MP4 rendition URL for social media sharing (Facebook, etc.)
+  // Requires mp4_support: "standard" when creating the asset
+  return `https://stream.mux.com/${playbackId}/high.mp4`;
+}
+
 export function getThumbnailUrl(playbackId: string): string {
   return `https://image.mux.com/${playbackId}/thumbnail.jpg`;
 }
@@ -175,6 +183,7 @@ export default {
   enableMuxLiveStream,
   resetMuxStreamKey,
   getPlaybackUrl,
+  getMp4Url,
   getThumbnailUrl,
   getAnimatedGifUrl,
   createDirectUpload,

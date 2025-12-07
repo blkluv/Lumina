@@ -90,8 +90,20 @@ function generateOgHtml(post: PostWithAuthor, req: Request): string {
   
   const mediaUrl = rawMediaUrl ? escapeUrl(rawMediaUrl) : null;
   const authorAvatar = rawAuthorAvatar ? escapeUrl(rawAuthorAvatar) : null;
-  // For Mux videos, use the hlsUrl; for legacy videos use mediaUrl
-  const videoStreamUrl = rawHlsUrl ? escapeUrl(rawHlsUrl) : mediaUrl;
+  
+  // For Mux videos, extract playback ID and generate MP4 URL for Facebook compatibility
+  // HLS URL format: https://stream.mux.com/{playbackId}.m3u8
+  // MP4 URL format: https://stream.mux.com/{playbackId}/high.mp4
+  let mp4Url: string | null = null;
+  if (rawHlsUrl && rawHlsUrl.includes('stream.mux.com')) {
+    const muxMatch = rawHlsUrl.match(/stream\.mux\.com\/([^/.]+)/);
+    if (muxMatch && muxMatch[1]) {
+      mp4Url = escapeUrl(`https://stream.mux.com/${muxMatch[1]}/high.mp4`);
+    }
+  }
+  
+  // For OG video, prefer MP4 (Facebook compatible) over HLS
+  const videoStreamUrl = mp4Url || (rawHlsUrl ? escapeUrl(rawHlsUrl) : mediaUrl);
   
   const isVideo = post.postType === 'video';
   const ogType = isVideo ? 'video.other' : 'article';
@@ -112,8 +124,8 @@ function generateOgHtml(post: PostWithAuthor, req: Request): string {
     imageUrl = defaultOgImage;
   }
   
-  // Determine video type based on URL (HLS for Mux, MP4 for legacy)
-  const videoType = rawHlsUrl ? 'application/x-mpegURL' : 'video/mp4';
+  // Use MP4 type for Facebook compatibility (MP4 is preferred), HLS as fallback
+  const videoType = mp4Url ? 'video/mp4' : (rawHlsUrl ? 'application/x-mpegURL' : 'video/mp4');
   
   let videoTags = '';
   if (isVideo && videoStreamUrl) {
