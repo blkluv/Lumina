@@ -374,14 +374,17 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     console.log("[Mux Upload] Got upload URL, uploadId:", uploadId);
     
     // Step 2: Upload file directly to Mux using UpChunk
-    // Use smaller chunks and dynamic sizing for better compatibility with large files
+    // Use chunked streaming - do NOT use useLargeFileWorkaround as it loads entire file into memory
+    // Only enable the workaround for Safari/WebKit if streaming is not supported
+    const needsWorkaround = !('stream' in File.prototype);
+    
     await new Promise<void>((resolve, reject) => {
       const upload = UpChunk.createUpload({
         endpoint: uploadUrl,
         file: file,
-        chunkSize: 5120, // 5MB chunks - more reliable for large files
+        chunkSize: 5120, // 5MB chunks - reliable for large files
         dynamicChunkSize: true, // Auto-adjust based on network speed
-        useLargeFileWorkaround: true, // Helps with Safari/WebKit large file issues
+        useLargeFileWorkaround: needsWorkaround, // Only for browsers without File.stream()
       });
       
       upload.on("progress", (progress: { detail: number }) => {
