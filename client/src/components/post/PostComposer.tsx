@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import { Image, Video, X, Loader2, Globe, Users, AlertTriangle, ShieldCheck, Shield, Upload } from "lucide-react";
-import * as tus from "tus-js-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -370,7 +369,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     return objectPath;
   };
 
-  // Upload video via Mux - handles all sizes reliably using tus resumable protocol
+  // Upload video via Mux - handles all sizes using manual chunked upload
   const uploadViaMux = async (file: File): Promise<{ hlsUrl: string; thumbnailUrl: string }> => {
     console.log("[Mux Upload] Starting Mux upload for file:", file.name, "size:", file.size);
     
@@ -386,35 +385,41 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     const { uploadId, uploadUrl } = initData;
     console.log("[Mux Upload] Got upload URL, uploadId:", uploadId);
     
-    // Step 2: Upload file using tus-js-client for true resumable/streaming uploads
-    // This properly streams the file without loading it entirely into memory
-    await new Promise<void>((resolve, reject) => {
-      const upload = new tus.Upload(file, {
-        endpoint: uploadUrl,
-        chunkSize: 5 * 1024 * 1024, // 5MB chunks
-        retryDelays: [0, 1000, 3000, 5000, 10000], // Retry on failure
-        metadata: {
-          filename: file.name,
-          filetype: file.type,
+    // Step 2: Upload file in chunks to avoid memory issues
+    // Mux direct upload supports chunked PUT requests with Content-Range headers
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const totalSize = file.size;
+    let uploadedBytes = 0;
+    
+    while (uploadedBytes < totalSize) {
+      const start = uploadedBytes;
+      const end = Math.min(uploadedBytes + CHUNK_SIZE, totalSize);
+      const chunk = file.slice(start, end);
+      
+      console.log(`[Mux Upload] Uploading chunk ${start}-${end-1}/${totalSize}`);
+      
+      const response = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Range": `bytes ${start}-${end - 1}/${totalSize}`,
         },
-        onError: (error) => {
-          console.error("[Mux Upload] tus error:", error);
-          reject(new Error(error.message || "Upload to Mux failed"));
-        },
-        onProgress: (bytesUploaded, bytesTotal) => {
-          const percent = Math.round((bytesUploaded / bytesTotal) * 100);
-          console.log("[Mux Upload] Progress:", percent + "%");
-          setUploadProgress(percent);
-        },
-        onSuccess: () => {
-          console.log("[Mux Upload] Upload complete, waiting for processing...");
-          resolve();
-        },
+        body: chunk,
       });
       
-      // Start the upload
-      upload.start();
-    });
+      if (!response.ok && response.status !== 308) {
+        // 308 is "Resume Incomplete" - expected for chunks
+        const errorText = await response.text().catch(() => "Unknown error");
+        throw new Error(`Chunk upload failed: ${response.status} - ${errorText}`);
+      }
+      
+      uploadedBytes = end;
+      const percent = Math.round((uploadedBytes / totalSize) * 100);
+      console.log("[Mux Upload] Progress:", percent + "%");
+      setUploadProgress(percent);
+    }
+    
+    console.log("[Mux Upload] All chunks uploaded, waiting for processing...");
     
     // Step 3: Poll for asset to be ready (Mux processes the video)
     setUploadProgress(100);
