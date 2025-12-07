@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Image, Video, X, Loader2, Globe, Users, AlertTriangle, ShieldCheck, Shield, Upload } from "lucide-react";
-import * as UpChunk from "@mux/upchunk";
+// Note: Removed UpChunk - using native fetch streaming instead to avoid FileReader memory issues
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -370,7 +370,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     return objectPath;
   };
 
-  // Upload video via Mux - handles all sizes reliably
+  // Upload video via Mux - handles all sizes reliably using native fetch streaming
   const uploadViaMux = async (file: File): Promise<{ hlsUrl: string; thumbnailUrl: string }> => {
     console.log("[Mux Upload] Starting Mux upload for file:", file.name, "size:", file.size);
     
@@ -386,43 +386,41 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     const { uploadId, uploadUrl } = initData;
     console.log("[Mux Upload] Got upload URL, uploadId:", uploadId);
     
-    // Step 2: Upload file directly to Mux using UpChunk
-    // Use chunked streaming - do NOT use useLargeFileWorkaround as it loads entire file into memory
-    // Only enable the workaround for Safari/WebKit if streaming is not supported
-    const needsWorkaround = !('stream' in File.prototype);
-    
+    // Step 2: Upload file directly to Mux using XMLHttpRequest for progress tracking
+    // This streams the file without loading it entirely into memory (unlike UpChunk's fallback)
     await new Promise<void>((resolve, reject) => {
-      const upload = UpChunk.createUpload({
-        endpoint: uploadUrl,
-        file: file,
-        chunkSize: 5120, // 5MB chunks - reliable for large files
-        dynamicChunkSize: true, // Auto-adjust based on network speed
-        useLargeFileWorkaround: needsWorkaround, // Only for browsers without File.stream()
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          console.log("[Mux Upload] Progress:", percent + "%");
+          setUploadProgress(percent);
+        }
       });
       
-      upload.on("progress", (progress: { detail: number }) => {
-        const percent = Math.round(progress.detail);
-        console.log("[Mux Upload] Progress:", percent + "%");
-        setUploadProgress(percent);
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          console.log("[Mux Upload] Upload complete, waiting for processing...");
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
+        }
       });
       
-      upload.on("error", (error: { detail: string }) => {
-        console.error("[Mux Upload] Error:", error.detail);
-        reject(new Error(error.detail || "Upload to Mux failed"));
+      xhr.addEventListener("error", () => {
+        console.error("[Mux Upload] Network error during upload");
+        reject(new Error("Network error during upload - please check your connection"));
       });
       
-      upload.on("success", () => {
-        console.log("[Mux Upload] Upload complete, waiting for processing...");
-        resolve();
+      xhr.addEventListener("timeout", () => {
+        reject(new Error("Upload timed out"));
       });
       
-      upload.on("offline", () => {
-        console.log("[Mux Upload] Connection lost, will resume when back online");
-      });
-      
-      upload.on("online", () => {
-        console.log("[Mux Upload] Back online, resuming upload");
-      });
+      // Mux direct upload expects a PUT request with the raw file
+      xhr.open("PUT", uploadUrl);
+      xhr.timeout = 600000; // 10 minutes timeout for large files
+      xhr.send(file); // Browser streams the file efficiently without loading into memory
     });
     
     // Step 3: Poll for asset to be ready (Mux processes the video)
