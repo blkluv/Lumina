@@ -107,8 +107,6 @@ export async function createDirectUpload(corsOrigin: string = "*"): Promise<MuxD
     new_asset_settings: {
       playback_policy: ["public"],
       video_quality: "basic",
-      // Enable static MP4 renditions for social media sharing
-      mp4_support: "standard",
     },
   });
 
@@ -116,6 +114,18 @@ export async function createDirectUpload(corsOrigin: string = "*"): Promise<MuxD
     id: upload.id,
     url: upload.url!,
   };
+}
+
+export async function createStaticRendition(assetId: string): Promise<void> {
+  const mux = getMuxClient();
+  try {
+    await mux.video.assets.createStaticRendition(assetId, {
+      resolution: "highest",
+    });
+  } catch (error) {
+    console.error("Failed to create static MP4 rendition:", error);
+    // Non-fatal - video will still work via HLS
+  }
 }
 
 export async function getUploadStatus(uploadId: string): Promise<{ status: string; assetId: string | null }> {
@@ -187,6 +197,7 @@ export default {
   getThumbnailUrl,
   getAnimatedGifUrl,
   createDirectUpload,
+  createStaticRendition,
   getUploadStatus,
   getAsset,
   waitForAssetReady,

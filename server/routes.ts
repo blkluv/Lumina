@@ -2410,6 +2410,14 @@ export async function registerRoutes(app: Express): Promise<void> {
       // If asset is created, get playback ID
       if (uploadStatus.assetId) {
         const asset = await muxService.getAsset(uploadStatus.assetId);
+        
+        // When asset is ready, trigger static MP4 rendition creation for social media sharing
+        if (asset.status === "ready") {
+          muxService.createStaticRendition(uploadStatus.assetId).catch(err => {
+            console.error("Static rendition creation failed:", err);
+          });
+        }
+        
         res.json({
           status: uploadStatus.status,
           assetId: uploadStatus.assetId,
