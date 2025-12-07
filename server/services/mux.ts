@@ -106,8 +106,11 @@ export async function createDirectUpload(corsOrigin: string = "*"): Promise<MuxD
     cors_origin: corsOrigin,
     new_asset_settings: {
       playback_policy: ["public"],
-      // Use capped-1080p for MP4 support (standard is deprecated)
-      mp4_support: "capped-1080p",
+      // Use static_renditions for MP4 support (mp4_support is deprecated)
+      // "highest" creates highest.mp4 at up to 4K resolution
+      static_renditions: [
+        { resolution: "highest" }
+      ],
     },
   });
 
@@ -174,8 +177,8 @@ export function getPlaybackUrl(playbackId: string): string {
 
 export function getMp4Url(playbackId: string): string {
   // Static MP4 rendition URL for social media sharing (Facebook, etc.)
-  // Uses capped-1080p (standard is deprecated)
-  return `https://stream.mux.com/${playbackId}/capped-1080p.mp4`;
+  // Uses static_renditions with resolution: "highest" -> produces highest.mp4
+  return `https://stream.mux.com/${playbackId}/highest.mp4`;
 }
 
 export function getThumbnailUrl(playbackId: string): string {

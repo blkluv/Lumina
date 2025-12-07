@@ -2425,7 +2425,7 @@ export async function registerRoutes(app: Express): Promise<void> {
           playbackId: asset.playbackId,
           duration: asset.duration,
           hlsUrl: asset.playbackId ? `https://stream.mux.com/${asset.playbackId}.m3u8` : null,
-          mp4Url: asset.playbackId ? `https://stream.mux.com/${asset.playbackId}/capped-1080p.mp4` : null,
+          mp4Url: asset.playbackId ? `https://stream.mux.com/${asset.playbackId}/highest.mp4` : null,
           thumbnailUrl: asset.playbackId ? `https://image.mux.com/${asset.playbackId}/thumbnail.jpg` : null,
         });
       } else {

@@ -93,12 +93,12 @@ function generateOgHtml(post: PostWithAuthor, req: Request): string {
   
   // For Mux videos, extract playback ID and generate MP4 URL for Facebook compatibility
   // HLS URL format: https://stream.mux.com/{playbackId}.m3u8
-  // MP4 URL format: https://stream.mux.com/{playbackId}/capped-1080p.mp4
+  // MP4 URL format: https://stream.mux.com/{playbackId}/highest.mp4
   let mp4Url: string | null = null;
   if (rawHlsUrl && rawHlsUrl.includes('stream.mux.com')) {
     const muxMatch = rawHlsUrl.match(/stream\.mux\.com\/([^/.]+)/);
     if (muxMatch && muxMatch[1]) {
-      mp4Url = escapeUrl(`https://stream.mux.com/${muxMatch[1]}/capped-1080p.mp4`);
+      mp4Url = escapeUrl(`https://stream.mux.com/${muxMatch[1]}/highest.mp4`);
     }
   }
   
