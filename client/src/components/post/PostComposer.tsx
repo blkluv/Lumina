@@ -374,11 +374,14 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     console.log("[Mux Upload] Got upload URL, uploadId:", uploadId);
     
     // Step 2: Upload file directly to Mux using UpChunk
+    // Use smaller chunks and dynamic sizing for better compatibility with large files
     await new Promise<void>((resolve, reject) => {
       const upload = UpChunk.createUpload({
         endpoint: uploadUrl,
         file: file,
-        chunkSize: 30720, // 30MB chunks for faster upload
+        chunkSize: 5120, // 5MB chunks - more reliable for large files
+        dynamicChunkSize: true, // Auto-adjust based on network speed
+        useLargeFileWorkaround: true, // Helps with Safari/WebKit large file issues
       });
       
       upload.on("progress", (progress: { detail: number }) => {
@@ -395,6 +398,14 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       upload.on("success", () => {
         console.log("[Mux Upload] Upload complete, waiting for processing...");
         resolve();
+      });
+      
+      upload.on("offline", () => {
+        console.log("[Mux Upload] Connection lost, will resume when back online");
+      });
+      
+      upload.on("online", () => {
+        console.log("[Mux Upload] Back online, resuming upload");
       });
     });
     
