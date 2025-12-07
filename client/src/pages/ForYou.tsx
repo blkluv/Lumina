@@ -380,33 +380,27 @@ function VideoCard({
     <>
       <div className="relative w-full h-full bg-black flex items-center justify-center">
         {muxPlaybackId ? (
-          <div 
-            className="w-full h-full cursor-pointer"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const clickX = e.clientX - rect.left;
-              const width = rect.width;
-              if (clickX < width * 0.85) {
-                togglePlay();
-              }
-            }}
-          >
-            <MuxPlayer
-              ref={muxPlayerRef}
-              playbackId={muxPlaybackId}
-              poster={post.thumbnailUrl || undefined}
-              loop
-              muted={isMuted}
-              autoPlay={isActive}
-              streamType="on-demand"
-              primaryColor="#10b981"
-              secondaryColor="#000000"
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              style={{ width: '100%', height: '100%', aspectRatio: '9/16', pointerEvents: 'none' }}
-              data-testid={`mux-video-${post.id}`}
-            />
-          </div>
+          <MuxPlayer
+            ref={muxPlayerRef}
+            playbackId={muxPlaybackId}
+            poster={post.thumbnailUrl || undefined}
+            loop
+            muted={isMuted}
+            autoPlay={isActive}
+            streamType="on-demand"
+            primaryColor="#10b981"
+            secondaryColor="#000000"
+            accentColor="#10b981"
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            className="w-full h-full object-contain"
+            style={{ 
+              width: '100%', 
+              height: '100%',
+              '--controls': 'none',
+            } as any}
+            data-testid={`mux-video-${post.id}`}
+          />
         ) : videoSrc ? (
           <video
             ref={videoRef}
