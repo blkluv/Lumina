@@ -66,11 +66,20 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
   const handleMediaSelect = (file: File, type: "image" | "video") => {
     setMediaFile(file);
     setMediaType(type);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setMediaPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    
+    // For videos, use URL.createObjectURL to avoid loading entire file into memory
+    // FileReader.readAsDataURL would exhaust browser memory for large videos (100MB+)
+    if (type === "video") {
+      const objectUrl = URL.createObjectURL(file);
+      setMediaPreview(objectUrl);
+    } else {
+      // For images, FileReader is fine since they're typically small
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setMediaPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,6 +150,10 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
   };
 
   const clearMedia = () => {
+    // Revoke object URL to prevent memory leaks (for video previews)
+    if (mediaPreview && mediaType === "video" && mediaPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(mediaPreview);
+    }
     setMediaFile(null);
     setMediaPreview(null);
     setMediaType(null);
