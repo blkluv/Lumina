@@ -106,9 +106,8 @@ export async function createDirectUpload(corsOrigin: string = "*"): Promise<MuxD
     cors_origin: corsOrigin,
     new_asset_settings: {
       playback_policy: ["public"],
-      // Removed video_quality: "basic" to allow MP4 support for Facebook sharing
-      // Default quality tier supports MP4 renditions
-      mp4_support: "standard",
+      // Use capped-1080p for MP4 support (standard is deprecated)
+      mp4_support: "capped-1080p",
     },
   });
 
@@ -175,8 +174,8 @@ export function getPlaybackUrl(playbackId: string): string {
 
 export function getMp4Url(playbackId: string): string {
   // Static MP4 rendition URL for social media sharing (Facebook, etc.)
-  // Requires mp4_support: "standard" when creating the asset
-  return `https://stream.mux.com/${playbackId}/high.mp4`;
+  // Uses capped-1080p (standard is deprecated)
+  return `https://stream.mux.com/${playbackId}/capped-1080p.mp4`;
 }
 
 export function getThumbnailUrl(playbackId: string): string {
