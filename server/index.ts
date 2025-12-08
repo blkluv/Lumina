@@ -11,6 +11,11 @@ import { ogTagMiddleware } from "./ogRenderer";
 const app = express();
 const httpServer = createServer(app);
 
+// Set server timeout to 10 minutes for large video uploads
+httpServer.timeout = 600000; // 10 minutes
+httpServer.keepAliveTimeout = 120000; // 2 minutes
+httpServer.headersTimeout = 125000; // Slightly more than keepAliveTimeout
+
 notificationHub.initialize(httpServer);
 
 declare module "http" {

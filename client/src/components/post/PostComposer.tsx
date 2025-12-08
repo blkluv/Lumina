@@ -190,7 +190,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
   // Chunked upload for large videos - uploads in smaller pieces to bypass size limits
   const uploadChunked = async (file: File): Promise<string> => {
     console.log("[Upload] Starting chunked upload for file:", file.name, "size:", file.size);
-    const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks (smaller for better reliability)
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     const csrfToken = await getCsrfToken();
     console.log("[Upload] Total chunks:", totalChunks, "CSRF token:", csrfToken ? "present" : "missing");
@@ -202,58 +202,91 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       totalSize: file.size,
       totalChunks,
     });
-    const { uploadId, objectPath } = await initResponse.json();
+    const { uploadId } = await initResponse.json();
     console.log("[Upload] Got uploadId:", uploadId);
     
-    // Upload each chunk
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    // Helper to upload a single chunk with retry
+    const uploadChunk = async (chunkIndex: number, maxRetries = 3): Promise<void> => {
       const start = chunkIndex * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, file.size);
       const chunk = file.slice(start, end);
       
-      const formData = new FormData();
-      formData.append("chunk", chunk);
-      formData.append("uploadId", uploadId);
-      formData.append("chunkIndex", String(chunkIndex));
-      formData.append("totalChunks", String(totalChunks));
-      
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            // Update progress based on chunks completed
-            const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-            setUploadProgress(progress);
-            resolve();
-          } else {
-            reject(new Error(`Chunk upload failed with status ${xhr.status}`));
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append("chunk", chunk, `chunk_${chunkIndex}`);
+            formData.append("uploadId", uploadId);
+            formData.append("chunkIndex", String(chunkIndex));
+            formData.append("totalChunks", String(totalChunks));
+            
+            xhr.upload.addEventListener("progress", (event) => {
+              if (event.lengthComputable && event.total > 0) {
+                // Calculate overall progress including this chunk's progress
+                const chunkProgress = event.loaded / event.total;
+                const overallProgress = ((chunkIndex + chunkProgress) / totalChunks) * 100;
+                setUploadProgress(Math.round(Math.min(overallProgress, 99))); // Cap at 99 until complete
+              }
+            });
+            
+            xhr.addEventListener("load", () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                console.log(`[Upload] Chunk ${chunkIndex + 1}/${totalChunks} complete`);
+                resolve();
+              } else {
+                let errorMsg = `Status ${xhr.status}`;
+                try {
+                  const errData = JSON.parse(xhr.responseText);
+                  errorMsg = errData.error || errorMsg;
+                } catch {}
+                reject(new Error(`Chunk upload failed: ${errorMsg}`));
+              }
+            });
+            
+            xhr.addEventListener("error", () => {
+              reject(new Error("Network error during chunk upload"));
+            });
+            
+            xhr.addEventListener("timeout", () => {
+              reject(new Error("Chunk upload timed out"));
+            });
+            
+            console.log(`[Upload] Sending chunk ${chunkIndex + 1}/${totalChunks} (attempt ${attempt}/${maxRetries})`);
+            xhr.open("POST", "/api/objects/chunked-upload/chunk");
+            xhr.withCredentials = true;
+            if (csrfToken) {
+              xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+            }
+            xhr.timeout = 180000; // 3 minutes per chunk
+            xhr.send(formData);
+          });
+          return; // Success - exit retry loop
+        } catch (error: any) {
+          console.error(`[Upload] Chunk ${chunkIndex} attempt ${attempt} failed:`, error.message);
+          if (attempt === maxRetries) {
+            throw error;
           }
-        });
-        
-        xhr.addEventListener("error", (e) => {
-          console.error("[Upload] Chunk XHR error:", e);
-          reject(new Error("Upload failed - please check your connection"));
-        });
-        
-        console.log("[Upload] Sending chunk", chunkIndex, "of", totalChunks);
-        xhr.open("POST", "/api/objects/chunked-upload/chunk");
-        xhr.withCredentials = true;
-        if (csrfToken) {
-          xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+          // Wait before retry with exponential backoff
+          await new Promise(r => setTimeout(r, 1000 * attempt));
         }
-        xhr.timeout = 120000; // 2 minutes per chunk
-        xhr.send(formData);
-      });
+      }
+    };
+    
+    // Upload each chunk sequentially
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      await uploadChunk(chunkIndex);
     }
     
     // Finalize the upload and get the actual storage path
+    console.log("[Upload] All chunks uploaded, completing...");
     const completeResponse = await apiRequest("POST", "/api/objects/chunked-upload/complete", {
       uploadId,
     });
     const completeData = await completeResponse.json();
     
-    // Use the actual path from the complete response (where the video was stored)
+    console.log("[Upload] Chunked upload complete:", completeData.objectPath);
+    setUploadProgress(100); // Show 100% on successful completion
     return completeData.objectPath;
   };
 
