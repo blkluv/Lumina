@@ -69,8 +69,12 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
       xhr.send(file);
     });
 
+    // Extract UUID from the signed URL path
+    // URL format: https://storage.googleapis.com/bucket/.private/uploads/UUID?...
     const urlParts = new URL(uploadURL);
-    return urlParts.pathname;
+    const pathParts = urlParts.pathname.split('/');
+    const uuid = pathParts[pathParts.length - 1];
+    return `/objects/uploads/${uuid}`;
   };
 
   const handleAddMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
