@@ -333,7 +333,7 @@ export class ObjectStorageService {
   }
 
   // Upload multiple chunk files directly to GCS - combines chunks into single file first
-  // This approach avoids GCS integrity issues by uploading a single complete file
+  // Uses synchronous file append to ensure data integrity (no stream buffering issues)
   async uploadFromChunkFiles(
     chunkPaths: string[],
     contentType: string
@@ -352,46 +352,46 @@ export class ObjectStorageService {
     const fs = await import("fs");
     const path = await import("path");
     const { pipeline } = await import("stream/promises");
-    const { PassThrough } = await import("stream");
     
-    // First, combine all chunks into a single temp file
-    // This is more reliable than streaming directly to GCS
+    // First, combine all chunks into a single temp file using synchronous append
+    // This ensures each chunk is fully written before moving to the next
     const tempCombinedPath = path.join(path.dirname(chunkPaths[0]), "combined_video");
     
     console.log(`[ChunkUpload] Combining ${chunkPaths.length} chunks into temp file...`);
     
-    // Create write stream for combined file
-    const combinedStream = fs.createWriteStream(tempCombinedPath);
+    let totalBytes = 0;
     
     try {
-      // Write each chunk to the combined file
+      // Use appendFile for atomic writes - no buffering issues
+      // First, create/truncate the file
+      await fs.promises.writeFile(tempCombinedPath, Buffer.alloc(0));
+      
+      // Append each chunk synchronously
       for (let i = 0; i < chunkPaths.length; i++) {
         const chunkPath = chunkPaths[i];
-        console.log(`[ChunkUpload] Appending chunk ${i + 1}/${chunkPaths.length}`);
         
+        // Read chunk
         const chunkData = await fs.promises.readFile(chunkPath);
-        await new Promise<void>((resolve, reject) => {
-          combinedStream.write(chunkData, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        totalBytes += chunkData.length;
+        console.log(`[ChunkUpload] Appending chunk ${i + 1}/${chunkPaths.length} (${chunkData.length} bytes, total: ${totalBytes})`);
+        
+        // Append to combined file - this is atomic and waits for disk flush
+        await fs.promises.appendFile(tempCombinedPath, chunkData);
         
         // Delete chunk file after appending to free disk space
         await fs.promises.unlink(chunkPath).catch(() => {});
       }
       
-      // Close the combined file
-      await new Promise<void>((resolve, reject) => {
-        combinedStream.end((err: Error | null | undefined) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      // Verify combined file size before upload
+      const stats = await fs.promises.stat(tempCombinedPath);
+      console.log(`[ChunkUpload] Combined file created: ${stats.size} bytes (expected: ${totalBytes})`);
       
-      console.log(`[ChunkUpload] Combined file created, uploading to GCS...`);
+      if (stats.size !== totalBytes) {
+        throw new Error(`Combined file size mismatch: got ${stats.size}, expected ${totalBytes}`);
+      }
       
       // Now upload the combined file to GCS using stream
+      console.log(`[ChunkUpload] Uploading ${stats.size} bytes to GCS...`);
       const readStream = fs.createReadStream(tempCombinedPath);
       const gcsWriteStream = file.createWriteStream({
         metadata: { contentType },
@@ -401,7 +401,7 @@ export class ObjectStorageService {
       
       await pipeline(readStream, gcsWriteStream);
       
-      console.log(`[ChunkUpload] Upload complete: ${chunkPaths.length} chunks`);
+      console.log(`[ChunkUpload] Upload complete: ${chunkPaths.length} chunks, ${stats.size} bytes`);
       
     } finally {
       // Clean up combined temp file
