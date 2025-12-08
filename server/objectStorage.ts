@@ -394,51 +394,75 @@ export class ObjectStorageService {
       sourceFiles.push(bucket.file(chunkObjectName));
     }
     
-    // GCS compose has a limit of 32 objects per compose operation
-    // For larger files, we need to compose in batches
-    const COMPOSE_LIMIT = 32;
-    let currentSources = sourceFiles;
-    let tempFileIndex = 0;
+    // Track files to clean up only after successful operations
+    const filesToCleanup: GCSFile[] = [];
     
-    while (currentSources.length > COMPOSE_LIMIT) {
-      const newSources: GCSFile[] = [];
+    try {
+      // GCS compose has a limit of 32 objects per compose operation
+      // For larger files, we need to compose in batches
+      const COMPOSE_LIMIT = 32;
+      let currentSources = sourceFiles;
+      let tempFileIndex = 0;
       
-      for (let i = 0; i < currentSources.length; i += COMPOSE_LIMIT) {
-        const batch = currentSources.slice(i, i + COMPOSE_LIMIT);
-        const tempPath = `${privateObjectDir}/temp-chunks/${uploadId}/composed_${tempFileIndex++}`;
-        const { objectName: tempObjectName } = parseObjectPath(tempPath);
-        const tempFile = bucket.file(tempObjectName);
+      while (currentSources.length > COMPOSE_LIMIT) {
+        const newSources: GCSFile[] = [];
         
-        console.log(`[GCS Compose] Composing batch of ${batch.length} files -> temp file ${tempFileIndex}`);
-        await bucket.combine(batch, tempFile);
-        await tempFile.setMetadata({ contentType });
-        newSources.push(tempFile);
-        
-        // Delete source files after composing
-        for (const src of batch) {
-          await src.delete().catch(() => {});
+        for (let i = 0; i < currentSources.length; i += COMPOSE_LIMIT) {
+          const batch = currentSources.slice(i, i + COMPOSE_LIMIT);
+          const tempPath = `${privateObjectDir}/temp-chunks/${uploadId}/composed_${tempFileIndex++}`;
+          const { objectName: tempObjectName } = parseObjectPath(tempPath);
+          const tempFile = bucket.file(tempObjectName);
+          
+          console.log(`[GCS Compose] Composing batch of ${batch.length} files -> temp file ${tempFileIndex}`);
+          await bucket.combine(batch, tempFile);
+          await tempFile.setMetadata({ contentType });
+          
+          // Verify the combined file exists before marking sources for cleanup
+          const [exists] = await tempFile.exists();
+          if (!exists) {
+            throw new Error(`Combined file ${tempObjectName} does not exist after combine`);
+          }
+          
+          newSources.push(tempFile);
+          
+          // Mark source files for cleanup after successful combine
+          filesToCleanup.push(...batch);
         }
+        
+        currentSources = newSources;
       }
       
-      currentSources = newSources;
+      // Final compose to destination
+      const destFile = bucket.file(finalObjectName);
+      console.log(`[GCS Compose] Final compose of ${currentSources.length} files -> ${finalObjectName}`);
+      await bucket.combine(currentSources, destFile);
+      await destFile.setMetadata({ contentType });
+      
+      // Verify final file exists
+      const [destExists] = await destFile.exists();
+      if (!destExists) {
+        throw new Error(`Final composed file ${finalObjectName} does not exist after combine`);
+      }
+      
+      // Mark remaining temp files for cleanup
+      filesToCleanup.push(...currentSources);
+      
+      // Get final file size for logging
+      const [metadata] = await destFile.getMetadata();
+      console.log(`[GCS Compose] Complete: ${metadata.size} bytes`);
+      
+      // Clean up all temp files after successful compose
+      console.log(`[GCS Compose] Cleaning up ${filesToCleanup.length} temp files`);
+      for (const file of filesToCleanup) {
+        await file.delete().catch(() => {});
+      }
+      
+      return `/objects/uploads/${uploadId}`;
+    } catch (error) {
+      console.error(`[GCS Compose] Error composing chunks:`, error);
+      // Don't clean up source chunks on error - they can be retried
+      throw error;
     }
-    
-    // Final compose to destination
-    const destFile = bucket.file(finalObjectName);
-    console.log(`[GCS Compose] Final compose of ${currentSources.length} files -> ${finalObjectName}`);
-    await bucket.combine(currentSources, destFile);
-    await destFile.setMetadata({ contentType });
-    
-    // Clean up remaining temp files
-    for (const src of currentSources) {
-      await src.delete().catch(() => {});
-    }
-    
-    // Get final file size for logging
-    const [metadata] = await destFile.getMetadata();
-    console.log(`[GCS Compose] Complete: ${metadata.size} bytes`);
-    
-    return `/objects/uploads/${uploadId}`;
   }
 
   // Check if a chunk exists in GCS
