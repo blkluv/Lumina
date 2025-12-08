@@ -121,7 +121,7 @@ function CreationPanel() {
   const [medium, setMedium] = useState("");
   const [styleOverrides, setStyleOverrides] = useState("");
   const [outputType, setOutputType] = useState<"image" | "video">("image");
-  const [modelProvider, setModelProvider] = useState("mock");
+  const [modelProvider, setModelProvider] = useState("openai");
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState("1:1");
 
@@ -340,12 +340,18 @@ function CreationPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="openai">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-500" />
+                      OpenAI (gpt-image-1)
+                    </div>
+                  </SelectItem>
                   <SelectItem value="mock">Mock (Demo)</SelectItem>
-                  <SelectItem value="replicate" disabled>Replicate</SelectItem>
-                  <SelectItem value="stability" disabled>Stability AI</SelectItem>
-                  <SelectItem value="openai" disabled>OpenAI</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                OpenAI uses Replit credits for image generation
+              </p>
             </div>
           </div>
 

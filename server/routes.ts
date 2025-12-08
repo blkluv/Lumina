@@ -43,6 +43,7 @@ import { notificationHub, generateWsToken } from "./websocket";
 import { sendBulkEmail, emailTemplates, sendEmail } from "./services/email";
 import { sendSMS, smsTemplates } from "./services/sms";
 import { createCheckoutSession, isStripeConfigured, getPublishableKey, verifyStripeWebhookSignature, isWebhookSecretConfigured, type StripeWebhookEvent } from "./services/payments";
+import { generateImageWithBrandStyle } from "./services/imageGeneration";
 import { contentModerationService, type ModerationResult } from "./services/contentModeration";
 import { generateAutoThumbnail, extractMultipleFrames, generateThumbnailAtTimestamp } from "./videoThumbnail";
 
@@ -8830,28 +8831,68 @@ export async function registerRoutes(app: Express): Promise<void> {
       }
 
       // Create the job
+      const provider = modelProvider || "openai";
       const job = await storage.createGenerationJob({
         userId,
         templateId: templateId || null,
-        provider: modelProvider || "mock",
-        model: modelName || "default",
+        provider,
+        model: modelName || "gpt-image-1",
         outputType: outputType || "image",
         resolvedPrompt,
         aspectRatio: aspectRatio || brandProfile?.defaultAspectRatio || "1:1"
       });
 
-      // Mock provider simulation - instantly complete with placeholder
-      setTimeout(async () => {
-        const isImage = (outputType || "image") === "image";
-        const placeholderUrl = isImage 
-          ? `https://placehold.co/512x512/1a1a2e/eee?text=AI+Generated`
-          : `https://placehold.co/512x288/1a1a2e/eee?text=Video+Preview`;
-        
-        await storage.updateGenerationJob(job.id, {
-          status: "completed",
-          resultUrl: placeholderUrl
-        });
-      }, 2000);
+      // Process the generation asynchronously
+      const jobAspectRatio = aspectRatio || brandProfile?.defaultAspectRatio || "1:1";
+      const isImage = (outputType || "image") === "image";
+      
+      // Update job to processing status
+      await storage.updateGenerationJob(job.id, { status: "processing" });
+
+      // Process in background
+      (async () => {
+        try {
+          if (provider === "openai" && isImage) {
+            // Real OpenAI image generation
+            const brandColors = brandProfile 
+              ? [brandProfile.primaryColor, brandProfile.secondaryColor].filter(Boolean) as string[]
+              : undefined;
+            const styleKeywords = brandProfile?.styleKeywords 
+              ? brandProfile.styleKeywords.split(",").map(s => s.trim())
+              : undefined;
+
+            const result = await generateImageWithBrandStyle(
+              resolvedPrompt,
+              brandColors,
+              styleKeywords,
+              jobAspectRatio
+            );
+
+            await storage.updateGenerationJob(job.id, {
+              status: "completed",
+              resultUrl: result.url
+            });
+          } else {
+            // Mock/unsupported provider - use placeholder
+            setTimeout(async () => {
+              const placeholderUrl = isImage 
+                ? `https://placehold.co/512x512/1a1a2e/eee?text=AI+Generated`
+                : `https://placehold.co/512x288/1a1a2e/eee?text=Video+Preview`;
+              
+              await storage.updateGenerationJob(job.id, {
+                status: "completed",
+                resultUrl: placeholderUrl
+              });
+            }, 2000);
+          }
+        } catch (error) {
+          console.error("Generation error:", error);
+          await storage.updateGenerationJob(job.id, {
+            status: "failed",
+            errorMessage: error instanceof Error ? error.message : "Generation failed"
+          });
+        }
+      })();
 
       res.json(job);
     } catch (error) {
