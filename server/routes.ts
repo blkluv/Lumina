@@ -36,6 +36,7 @@ const uploadLimiter = rateLimit({
   message: { error: "Too many uploads, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 import { notificationHub, generateWsToken } from "./websocket";
 import { sendBulkEmail, emailTemplates, sendEmail } from "./services/email";
@@ -51,6 +52,7 @@ const authLimiter = rateLimit({
   message: { error: "Too many authentication attempts, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 const postLimiter = rateLimit({
@@ -59,6 +61,7 @@ const postLimiter = rateLimit({
   message: { error: "Too many posts, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 const generalLimiter = rateLimit({
@@ -67,6 +70,7 @@ const generalLimiter = rateLimit({
   message: { error: "Too many requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 // HTML sanitization options - strip all HTML for security
