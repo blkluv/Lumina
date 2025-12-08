@@ -55,6 +55,7 @@ import PostDetail from "@/pages/PostDetail";
 import Feedback from "@/pages/Feedback";
 import About from "@/pages/About";
 import GrowthHub from "@/pages/growth-hub";
+import CreationHub from "@/pages/CreationHub";
 import { CartProvider } from "@/lib/cartContext";
 import { AffiliateProvider } from "@/lib/affiliateContext";
 
@@ -127,6 +128,7 @@ function Router() {
       <Route path="/marketplace/checkout" component={() => <ProtectedRoute component={Checkout} />} />
       <Route path="/post/:id" component={PostDetail} />
       <Route path="/feedback" component={Feedback} />
+      <Route path="/creation-hub" component={() => <ProtectedRoute component={CreationHub} />} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} />} />
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}

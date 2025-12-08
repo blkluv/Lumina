@@ -304,6 +304,16 @@ import {
   type RewardsLedgerEntry,
   type InsertRewardsLedger,
   type ReferralStatsRecord,
+  promptTemplates,
+  generationJobs,
+  userBrandProfiles,
+  type PromptTemplate,
+  type InsertPromptTemplate,
+  type GenerationJob,
+  type InsertGenerationJob,
+  type GenerationJobWithDetails,
+  type UserBrandProfile,
+  type InsertUserBrandProfile,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, sql, inArray, ilike } from "drizzle-orm";
@@ -541,6 +551,24 @@ export interface IStorage {
   // Feedback/Beta Reports
   getFeedbackCount(): Promise<number>;
   createFeedbackReport(report: InsertFeedbackReport): Promise<FeedbackReport>;
+  
+  // Creation Hub: Brand Profiles
+  getUserBrandProfile(userId: string): Promise<UserBrandProfile | undefined>;
+  createUserBrandProfile(profile: InsertUserBrandProfile): Promise<UserBrandProfile>;
+  updateUserBrandProfile(userId: string, updates: Partial<UserBrandProfile>): Promise<UserBrandProfile | undefined>;
+  
+  // Creation Hub: Prompt Templates
+  getPromptTemplates(options?: { ownerId?: string | null; scope?: "global" | "mine" | "all" }): Promise<PromptTemplate[]>;
+  getPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
+  createPromptTemplate(template: InsertPromptTemplate): Promise<PromptTemplate>;
+  updatePromptTemplate(id: string, updates: Partial<PromptTemplate>): Promise<PromptTemplate | undefined>;
+  deletePromptTemplate(id: string): Promise<void>;
+  
+  // Creation Hub: Generation Jobs
+  getGenerationJobs(options?: { userId?: string; status?: string; outputType?: string; limit?: number }): Promise<GenerationJobWithDetails[]>;
+  getGenerationJob(id: string): Promise<GenerationJobWithDetails | undefined>;
+  createGenerationJob(job: InsertGenerationJob): Promise<GenerationJob>;
+  updateGenerationJob(id: string, updates: Partial<GenerationJob>): Promise<GenerationJob | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4788,6 +4816,149 @@ export class DatabaseStorage implements IStorage {
   async createGrowthRewardEntry(entry: InsertRewardsLedger): Promise<RewardsLedgerEntry> {
     const [created] = await db.insert(rewardsLedger).values(entry as any).returning();
     return created;
+  }
+
+  // ============= CREATION HUB: BRAND PROFILES =============
+
+  async getUserBrandProfile(userId: string): Promise<UserBrandProfile | undefined> {
+    const [profile] = await db.select()
+      .from(userBrandProfiles)
+      .where(eq(userBrandProfiles.userId, userId));
+    return profile || undefined;
+  }
+
+  async createUserBrandProfile(profile: InsertUserBrandProfile): Promise<UserBrandProfile> {
+    const [created] = await db.insert(userBrandProfiles)
+      .values(profile as any)
+      .returning();
+    return created;
+  }
+
+  async updateUserBrandProfile(userId: string, updates: Partial<UserBrandProfile>): Promise<UserBrandProfile | undefined> {
+    const [updated] = await db.update(userBrandProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(userBrandProfiles.userId, userId))
+      .returning();
+    return updated || undefined;
+  }
+
+  // ============= CREATION HUB: PROMPT TEMPLATES =============
+
+  async getPromptTemplates(options?: { ownerId?: string | null; scope?: "global" | "mine" | "all" }): Promise<PromptTemplate[]> {
+    const conditions: any[] = [];
+    
+    if (options?.scope === "global") {
+      conditions.push(sql`${promptTemplates.ownerId} IS NULL`);
+    } else if (options?.scope === "mine" && options?.ownerId) {
+      conditions.push(eq(promptTemplates.ownerId, options.ownerId));
+    } else if (options?.scope === "all" && options?.ownerId) {
+      conditions.push(or(
+        sql`${promptTemplates.ownerId} IS NULL`,
+        eq(promptTemplates.ownerId, options.ownerId)
+      ));
+    }
+    
+    return await db.select()
+      .from(promptTemplates)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(promptTemplates.createdAt));
+  }
+
+  async getPromptTemplate(id: string): Promise<PromptTemplate | undefined> {
+    const [template] = await db.select()
+      .from(promptTemplates)
+      .where(eq(promptTemplates.id, id));
+    return template || undefined;
+  }
+
+  async createPromptTemplate(template: InsertPromptTemplate): Promise<PromptTemplate> {
+    const [created] = await db.insert(promptTemplates)
+      .values(template as any)
+      .returning();
+    return created;
+  }
+
+  async updatePromptTemplate(id: string, updates: Partial<PromptTemplate>): Promise<PromptTemplate | undefined> {
+    const [updated] = await db.update(promptTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(promptTemplates.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePromptTemplate(id: string): Promise<void> {
+    await db.delete(promptTemplates)
+      .where(eq(promptTemplates.id, id));
+  }
+
+  // ============= CREATION HUB: GENERATION JOBS =============
+
+  async getGenerationJobs(options?: { userId?: string; status?: string; outputType?: string; limit?: number }): Promise<GenerationJobWithDetails[]> {
+    const conditions: any[] = [];
+    
+    if (options?.userId) {
+      conditions.push(eq(generationJobs.userId, options.userId));
+    }
+    if (options?.status) {
+      conditions.push(eq(generationJobs.status, options.status as any));
+    }
+    if (options?.outputType) {
+      conditions.push(eq(generationJobs.outputType, options.outputType as any));
+    }
+    
+    const jobs = await db.select()
+      .from(generationJobs)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(generationJobs.createdAt))
+      .limit(options?.limit || 50);
+    
+    const jobsWithTemplates: GenerationJobWithDetails[] = await Promise.all(
+      jobs.map(async (job) => {
+        let template: PromptTemplate | null = null;
+        if (job.templateId) {
+          const [t] = await db.select()
+            .from(promptTemplates)
+            .where(eq(promptTemplates.id, job.templateId));
+          template = t || null;
+        }
+        return { ...job, template };
+      })
+    );
+    
+    return jobsWithTemplates;
+  }
+
+  async getGenerationJob(id: string): Promise<GenerationJobWithDetails | undefined> {
+    const [job] = await db.select()
+      .from(generationJobs)
+      .where(eq(generationJobs.id, id));
+    
+    if (!job) return undefined;
+    
+    let template: PromptTemplate | null = null;
+    if (job.templateId) {
+      const [t] = await db.select()
+        .from(promptTemplates)
+        .where(eq(promptTemplates.id, job.templateId));
+      template = t || null;
+    }
+    
+    return { ...job, template };
+  }
+
+  async createGenerationJob(job: InsertGenerationJob): Promise<GenerationJob> {
+    const [created] = await db.insert(generationJobs)
+      .values(job as any)
+      .returning();
+    return created;
+  }
+
+  async updateGenerationJob(id: string, updates: Partial<GenerationJob>): Promise<GenerationJob | undefined> {
+    const [updated] = await db.update(generationJobs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(generationJobs.id, id))
+      .returning();
+    return updated || undefined;
   }
 }
 

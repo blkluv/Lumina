@@ -8581,4 +8581,282 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.status(500).json({ error: "Failed to get summary" });
     }
   });
+
+  // ============= CREATION HUB API =============
+
+  // Get user's brand profile
+  app.get("/api/creation-hub/brand-profile", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const profile = await storage.getUserBrandProfile(userId);
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Get brand profile error:", error);
+      res.status(500).json({ error: "Failed to get brand profile" });
+    }
+  });
+
+  // Update user's brand profile
+  app.put("/api/creation-hub/brand-profile", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { primaryColor, secondaryColor, styleKeywords, defaultAspectRatio } = req.body;
+      
+      const existing = await storage.getUserBrandProfile(userId);
+      
+      if (existing) {
+        const updated = await storage.updateUserBrandProfile(userId, {
+          primaryColor,
+          secondaryColor,
+          styleKeywords,
+          defaultAspectRatio
+        });
+        res.json(updated);
+      } else {
+        const created = await storage.createUserBrandProfile({
+          userId,
+          primaryColor,
+          secondaryColor,
+          styleKeywords,
+          defaultAspectRatio
+        });
+        res.json(created);
+      }
+    } catch (error) {
+      console.error("Update brand profile error:", error);
+      res.status(500).json({ error: "Failed to update brand profile" });
+    }
+  });
+
+  // Get prompt templates
+  app.get("/api/creation-hub/templates", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const scope = (req.query.scope as "global" | "mine" | "all") || "all";
+      
+      const templates = await storage.getPromptTemplates({ ownerId: userId, scope });
+      res.json(templates);
+    } catch (error) {
+      console.error("Get templates error:", error);
+      res.status(500).json({ error: "Failed to get templates" });
+    }
+  });
+
+  // Get single template
+  app.get("/api/creation-hub/templates/:id", requireAuth, async (req, res) => {
+    try {
+      const template = await storage.getPromptTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Get template error:", error);
+      res.status(500).json({ error: "Failed to get template" });
+    }
+  });
+
+  // Create prompt template
+  app.post("/api/creation-hub/templates", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { name, description, basePrompt, outputType, placeholders } = req.body;
+      
+      const template = await storage.createPromptTemplate({
+        ownerId: userId,
+        name,
+        description,
+        basePrompt,
+        outputType: outputType || "image",
+        placeholders
+      });
+      res.json(template);
+    } catch (error) {
+      console.error("Create template error:", error);
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  // Update prompt template
+  app.put("/api/creation-hub/templates/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const template = await storage.getPromptTemplate(req.params.id);
+      
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      // Only owner can update
+      if (template.ownerId !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      const { name, description, basePrompt, outputType, placeholders } = req.body;
+      const updated = await storage.updatePromptTemplate(req.params.id, {
+        name,
+        description,
+        basePrompt,
+        outputType,
+        placeholders
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Update template error:", error);
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  // Delete prompt template
+  app.delete("/api/creation-hub/templates/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const template = await storage.getPromptTemplate(req.params.id);
+      
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      // Only owner can delete
+      if (template.ownerId !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      await storage.deletePromptTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete template error:", error);
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
+  // Get generation jobs
+  app.get("/api/creation-hub/jobs", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const status = req.query.status as string | undefined;
+      const outputType = req.query.outputType as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const jobs = await storage.getGenerationJobs({ userId, status, outputType, limit });
+      res.json(jobs);
+    } catch (error) {
+      console.error("Get jobs error:", error);
+      res.status(500).json({ error: "Failed to get jobs" });
+    }
+  });
+
+  // Get single job
+  app.get("/api/creation-hub/jobs/:id", requireAuth, async (req, res) => {
+    try {
+      const job = await storage.getGenerationJob(req.params.id);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+      
+      // Only owner can view
+      if (job.userId !== req.session.userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      res.json(job);
+    } catch (error) {
+      console.error("Get job error:", error);
+      res.status(500).json({ error: "Failed to get job" });
+    }
+  });
+
+  // Generate content (create job)
+  app.post("/api/creation-hub/generate", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { 
+        subject, 
+        vibe, 
+        medium, 
+        styleOverrides, 
+        outputType, 
+        modelProvider, 
+        modelName, 
+        templateId,
+        aspectRatio 
+      } = req.body;
+
+      // Get user's brand profile
+      const brandProfile = await storage.getUserBrandProfile(userId);
+      
+      // Load template if provided
+      let template = null;
+      if (templateId) {
+        template = await storage.getPromptTemplate(templateId);
+      }
+
+      // Build the resolved prompt
+      let resolvedPrompt = "";
+      
+      if (template) {
+        resolvedPrompt = template.basePrompt;
+        // Replace placeholders
+        if (subject) resolvedPrompt = resolvedPrompt.replace(/{subject}/g, subject);
+        if (vibe) resolvedPrompt = resolvedPrompt.replace(/{vibe}/g, vibe);
+        if (medium) resolvedPrompt = resolvedPrompt.replace(/{medium}/g, medium);
+      } else {
+        // Build from inputs
+        const parts = [];
+        if (subject) parts.push(subject);
+        if (vibe) parts.push(`in a ${vibe} atmosphere`);
+        if (medium) parts.push(`rendered as ${medium}`);
+        resolvedPrompt = parts.join(", ");
+      }
+
+      // Append brand style if present
+      if (brandProfile) {
+        const brandParts = [];
+        if (brandProfile.styleKeywords) {
+          brandParts.push(`in the style of ${brandProfile.styleKeywords}`);
+        }
+        if (brandProfile.primaryColor || brandProfile.secondaryColor) {
+          const colors = [brandProfile.primaryColor, brandProfile.secondaryColor].filter(Boolean).join(" and ");
+          if (colors) brandParts.push(`using colors ${colors}`);
+        }
+        if (brandParts.length > 0) {
+          resolvedPrompt += ", " + brandParts.join(", ");
+        }
+      }
+
+      // Append style overrides
+      if (styleOverrides) {
+        resolvedPrompt += ", " + styleOverrides;
+      }
+
+      // Create the job
+      const job = await storage.createGenerationJob({
+        userId,
+        templateId: templateId || null,
+        provider: modelProvider || "mock",
+        model: modelName || "default",
+        outputType: outputType || "image",
+        resolvedPrompt,
+        aspectRatio: aspectRatio || brandProfile?.defaultAspectRatio || "1:1"
+      });
+
+      // Mock provider simulation - instantly complete with placeholder
+      setTimeout(async () => {
+        const isImage = (outputType || "image") === "image";
+        const placeholderUrl = isImage 
+          ? `https://placehold.co/512x512/1a1a2e/eee?text=AI+Generated`
+          : `https://placehold.co/512x288/1a1a2e/eee?text=Video+Preview`;
+        
+        await storage.updateGenerationJob(job.id, {
+          status: "completed",
+          resultUrl: placeholderUrl
+        });
+      }, 2000);
+
+      res.json(job);
+    } catch (error) {
+      console.error("Generate error:", error);
+      res.status(500).json({ error: "Failed to generate content" });
+    }
+  });
 }

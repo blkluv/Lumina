@@ -4424,3 +4424,111 @@ export interface CommunityEventWithHost extends CommunityEvent {
   rsvps?: CommunityEventRsvp[];
   userRsvp?: CommunityEventRsvp | null;
 }
+
+// ============= CREATION HUB: ENUMS =============
+
+export const creationOutputTypeEnum = pgEnum("creation_output_type", ["image", "video"]);
+export const generationStatusEnum = pgEnum("generation_status", ["pending", "running", "completed", "failed"]);
+
+// ============= CREATION HUB: TABLES =============
+
+export const promptTemplates = pgTable("prompt_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  basePrompt: text("base_prompt").notNull(),
+  outputType: creationOutputTypeEnum("output_type").notNull().default("image"),
+  placeholders: text("placeholders"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const promptTemplatesRelations = relations(promptTemplates, ({ one }) => ({
+  owner: one(users, {
+    fields: [promptTemplates.ownerId],
+    references: [users.id],
+  }),
+}));
+
+export const generationJobs = pgTable("generation_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  templateId: varchar("template_id").references(() => promptTemplates.id, { onDelete: "set null" }),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  outputType: creationOutputTypeEnum("output_type").notNull().default("image"),
+  resolvedPrompt: text("resolved_prompt").notNull(),
+  status: generationStatusEnum("status").notNull().default("pending"),
+  resultUrl: text("result_url"),
+  errorMessage: text("error_message"),
+  aspectRatio: text("aspect_ratio").default("1:1"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const generationJobsRelations = relations(generationJobs, ({ one }) => ({
+  user: one(users, {
+    fields: [generationJobs.userId],
+    references: [users.id],
+  }),
+  template: one(promptTemplates, {
+    fields: [generationJobs.templateId],
+    references: [promptTemplates.id],
+  }),
+}));
+
+export const userBrandProfiles = pgTable("user_brand_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  primaryColor: text("primary_color"),
+  secondaryColor: text("secondary_color"),
+  styleKeywords: text("style_keywords"),
+  defaultAspectRatio: text("default_aspect_ratio").default("1:1"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const userBrandProfilesRelations = relations(userBrandProfiles, ({ one }) => ({
+  user: one(users, {
+    fields: [userBrandProfiles.userId],
+    references: [users.id],
+  }),
+}));
+
+// ============= CREATION HUB: INSERT SCHEMAS =============
+
+export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertGenerationJobSchema = createInsertSchema(generationJobs).omit({
+  id: true,
+  status: true,
+  resultUrl: true,
+  errorMessage: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserBrandProfileSchema = createInsertSchema(userBrandProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// ============= CREATION HUB: TYPES =============
+
+export type InsertPromptTemplate = z.infer<typeof insertPromptTemplateSchema>;
+export type PromptTemplate = typeof promptTemplates.$inferSelect;
+export type InsertGenerationJob = z.infer<typeof insertGenerationJobSchema>;
+export type GenerationJob = typeof generationJobs.$inferSelect;
+export type InsertUserBrandProfile = z.infer<typeof insertUserBrandProfileSchema>;
+export type UserBrandProfile = typeof userBrandProfiles.$inferSelect;
+
+export interface GenerationJobWithDetails extends GenerationJob {
+  template?: PromptTemplate | null;
+}

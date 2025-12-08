@@ -1,0 +1,247 @@
+
+Build a full stack TypeScript project called Lumina Creation Hub.
+
+Goal
+Create a modular AI creation hub where each user can generate images or videos using AI via one or more providers, but with a fully customizable style system per user. The system must not be hard coded to any single brand. Instead, each user defines their own visual profile and prompts can be built from templates plus user overrides.
+
+High level requirements
+Use the following stack.
+Frontend: React with TypeScript and Tailwind CSS.
+Backend: Node with Express and TypeScript.
+Database: SQLite with Prisma ORM.
+Project should run in a single Replit environment with a frontend and backend folder, plus a shared types folder.
+
+Core concepts and data models
+
+Create Prisma models:
+
+User
+id (string, cuid)
+email (string, unique)
+displayName (string)
+brandPrimaryColor (string, optional)
+brandSecondaryColor (string, optional)
+brandStyleKeywords (string, optional, store as comma separated list)
+defaultAspectRatio (string, optional, for example 9:16)
+createdAt (DateTime)
+updatedAt (DateTime)
+
+PromptTemplate
+id (string, cuid)
+ownerId (string, nullable; if null then template is global)
+name (string)
+description (string)
+basePrompt (string)
+outputType (enum: IMAGE or VIDEO)
+placeholders (string, optional, comma separated list of placeholder names like subject,vibe,medium)
+isDefault (boolean, default false)
+createdAt (DateTime)
+updatedAt (DateTime)
+
+GenerationJob
+id (string, cuid)
+userId (string)
+templateId (string, nullable)
+provider (string, for example replicate, stability, openai, mock)
+model (string, for example flux, sdxl, dalle3, custom)
+outputType (enum: IMAGE or VIDEO)
+resolvedPrompt (string)
+status (enum: PENDING, RUNNING, COMPLETED, FAILED)
+resultUrl (string, nullable)
+errorMessage (string, nullable)
+createdAt (DateTime)
+updatedAt (DateTime)
+
+API design
+
+Implement a REST API in the backend with these endpoints:
+
+POST /api/auth/mock-login
+Body: { email, displayName }
+If user does not exist, create it.
+Return: user object and a simple session token stored in memory or a signed cookie. No real auth provider is needed; this is just to simulate users.
+
+GET /api/me
+Return the current user profile based on the mock session.
+
+PUT /api/me/brand-profile
+Body: { brandPrimaryColor, brandSecondaryColor, brandStyleKeywords, defaultAspectRatio }
+Update the current user’s brand profile. brandStyleKeywords is an array of strings on the frontend, send as a comma separated string to the backend.
+
+GET /api/templates
+Query params: scope = global, mine, all.
+Return prompt templates. Global templates have ownerId null, user templates have ownerId set to current user.
+
+POST /api/templates
+Body: { name, description, basePrompt, outputType, placeholders }
+Create a new template owned by the current user.
+
+POST /api/generate
+Body example:
+{
+subject: string,
+vibe: string,
+medium: string,
+styleOverrides?: string,
+outputType: IMAGE or VIDEO,
+modelProvider: string,
+modelName?: string,
+templateId?: string,
+aspectRatio?: string
+}
+
+Backend logic for /api/generate:
+
+1. Load the current user and their brand profile.
+
+
+2. If templateId is provided, load the template.
+
+
+3. Build a final resolved prompt string using this logic:
+a. Start with template.basePrompt if provided.
+b. Replace placeholders in the template like {subject}, {vibe}, {medium} if they appear.
+c. Append user brand style if present, such as:
+“in the style of [brandStyleKeywords], using colors [brandPrimaryColor] and [brandSecondaryColor]”
+d. Append any styleOverrides from the request.
+e. If no templateId is provided, construct a prompt from subject, vibe, medium, and brand style.
+
+
+4. Create a GenerationJob row with status PENDING and resolvedPrompt.
+
+
+5. Call a provider abstraction layer that handles the actual AI call.
+
+
+
+Provider abstraction
+
+Create a service called providers in the backend that exposes an interface:
+
+generateImage(prompt: string, aspectRatio?: string, providerName?: string, modelName?: string)
+generateVideo(prompt: string, aspectRatio?: string, providerName?: string, modelName?: string)
+
+Implement at least one concrete provider called MockProvider that does not call any external API, but simulates a delay and then returns a placeholder image or video URL, such as https://placehold.co. Save that URL in GenerationJob.resultUrl and mark the job COMPLETED.
+
+In addition, scaffold adapters for real providers, but keep them disabled by default.
+For example: ReplicateProvider, StabilityProvider, OpenAIProvider.
+These should read API keys from environment variables like REPLICATE_API_TOKEN, STABILITY_API_KEY, OPENAI_API_KEY, but if the keys are missing, they should throw a clear error or fall back to the mock provider. The logic in /api/generate should support a configuration flag that determines whether to use mock only or real providers.
+
+Also add:
+
+GET /api/jobs
+Return the user’s previous GenerationJob entries, with filters by status and outputType.
+
+GET /api/jobs/:id
+Return a single job with resultUrl if available.
+
+Frontend requirements
+
+Use React with TypeScript and Tailwind. Build the following main UI areas.
+
+1. Simple mock login screen
+A page where the user enters email and display name. On submit, call /api/auth/mock-login and store a token in local storage or a simple cookie. After login, redirect to the Creation Hub.
+
+
+2. Brand profile editor
+A "Brand Profile" panel where the user can set:
+Primary color (color input)
+Secondary color (color input)
+Style keywords (comma separated string, displayed as removable chips)
+Default aspect ratio (select: 1:1, 16:9, 9:16, 4:5)
+On save, call PUT /api/me/brand-profile.
+
+
+
+Use CSS variables or a Tailwind theme override so the UI reflects the user’s brand colors dynamically where possible (buttons, highlights).
+
+3. Prompt template manager
+A page or section where the user can:
+See a list of global templates and their own templates.
+Create a new template with name, description, basePrompt, outputType, and placeholder list.
+Show an example basePrompt like:
+“A hyper realistic cinematic portrait of {subject} in a {vibe} atmosphere, ultra detailed, {medium}.”
+Explain in the UI that placeholders like {subject} and {vibe} will be replaced automatically.
+
+
+4. Creation Hub main screen
+This is the main screen. It should have:
+
+
+
+Left side:
+Inputs for subject, vibe, medium, styleOverrides, outputType, template selector, model provider selector, aspect ratio selector.
+A dropdown for outputType (IMAGE or VIDEO).
+A dropdown for provider (mock, replicate, stability, openai; even if some are disabled).
+
+Right side:
+A live "Final Prompt Preview" box that shows the resolved prompt string before the user clicks generate. The frontend should build a preview using the same logic as the backend (subject plus brand style plus template placeholders) so the user understands what will be sent to the model. This does not have to be one hundred percent identical to backend logic but should approximate it closely.
+
+Bottom:
+A Generate button that sends the request to POST /api/generate, shows loading state, then links to the job result when ready.
+
+5. Job history and gallery
+A tab or section that shows the user’s GenerationJob list as cards:
+Small thumbnail (use resultUrl if it is an image, or a video icon if outputType is VIDEO).
+Prompt excerpt
+Provider and model
+Status and createdAt timestamp
+
+
+
+Allow filtering by status and outputType.
+
+Design guidelines
+
+Do not hard code any specific brand like Axiom. The wording in the UI should be neutral, for example:
+
+"Brand style" instead of naming a specific project.
+"Your visual universe" instead of any named ecosystem.
+
+Make it obvious that users can create their own aesthetic:
+
+Allow them to type style keywords like:
+neon cyberpunk
+Afro-futurism
+sacred geometry
+minimalist pastel
+dark fantasy
+
+Then show how those style keywords are appended to the final prompt.
+
+Code organization
+
+Create structure:
+
+/backend
+server.ts
+routes
+services
+providers
+prisma schema and migration
+
+/frontend
+src
+pages or routes
+components
+hooks
+services for calling the API
+
+/shared
+types.ts for shared types between frontend and backend (User, PromptTemplate, GenerationJob, enums).
+
+Quality and developer experience
+
+Add basic error handling and display API errors in the frontend as toast messages or inline alerts.
+Use clear TypeScript types everywhere.
+Add a small README in the project root that explains:
+How to run the backend
+How to run the frontend
+Where to configure provider API keys
+How the template and brand system works conceptually.
+
+Primary design goal
+
+Make the system flexible and customizable for each user.
+Do not ship any hard coded presets or copy for a specific brand.
+Instead, build a generic engine that can support any creator’s style profile and prompt templates.
