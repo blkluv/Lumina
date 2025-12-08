@@ -332,8 +332,8 @@ export class ObjectStorageService {
     return `/objects/${relativePath}`;
   }
 
-  // Upload multiple chunk files directly to GCS - streams chunks sequentially without intermediate file
-  // This avoids both memory exhaustion AND temp disk space issues
+  // Upload multiple chunk files directly to GCS - reads chunks sequentially with proper data integrity
+  // Uses a simpler approach: read each chunk fully, write to GCS stream with backpressure
   async uploadFromChunkFiles(
     chunkPaths: string[],
     contentType: string
@@ -349,76 +349,76 @@ export class ObjectStorageService {
     const bucket = objectStorageClient.bucket(bucketName);
     const file = bucket.file(objectName);
     
-    // Import fs and stream utilities
     const fs = await import("fs");
-    const { PassThrough } = await import("stream");
-    const { finished } = await import("stream/promises");
     
-    // Create GCS write stream with resumable upload
+    // Create GCS write stream - use non-resumable for simpler, more reliable upload
     const gcsWriteStream = file.createWriteStream({
       metadata: { contentType },
-      resumable: true,
+      resumable: false, // Non-resumable is simpler and more reliable for assembled files
     });
     
-    // Use PassThrough as intermediate to pipe all chunks through
-    const passThrough = new PassThrough();
-    
-    // Track errors from downstream streams to reject chunk processing immediately
-    let downstreamError: Error | null = null;
-    const handleDownstreamError = (err: Error) => {
-      downstreamError = err;
-      passThrough.destroy(err);
-      gcsWriteStream.destroy(err);
+    // Helper to write data with backpressure handling
+    const writeWithBackpressure = (data: Buffer): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const canContinue = gcsWriteStream.write(data, (err) => {
+          if (err) reject(err);
+        });
+        if (canContinue) {
+          resolve();
+        } else {
+          // Wait for drain event before continuing
+          gcsWriteStream.once("drain", resolve);
+          gcsWriteStream.once("error", reject);
+        }
+      });
     };
     
-    // Attach error handlers BEFORE piping
-    passThrough.on("error", handleDownstreamError);
-    gcsWriteStream.on("error", handleDownstreamError);
-    
-    // Start piping to GCS
-    passThrough.pipe(gcsWriteStream);
-    
     try {
-      // Stream each chunk file sequentially with proper backpressure
-      for (const chunkPath of chunkPaths) {
-        // Check if downstream failed before starting next chunk
-        if (downstreamError) {
-          throw downstreamError;
+      // Process each chunk sequentially - read small pieces at a time to limit memory
+      const BUFFER_SIZE = 64 * 1024; // 64KB buffer for reading
+      
+      for (let i = 0; i < chunkPaths.length; i++) {
+        const chunkPath = chunkPaths[i];
+        console.log(`[ChunkUpload] Processing chunk ${i + 1}/${chunkPaths.length}`);
+        
+        // Read and write chunk in small pieces to limit memory usage
+        const fd = await fs.promises.open(chunkPath, "r");
+        const buffer = Buffer.alloc(BUFFER_SIZE);
+        
+        try {
+          let bytesRead: number;
+          let position = 0;
+          
+          do {
+            const result = await fd.read(buffer, 0, BUFFER_SIZE, position);
+            bytesRead = result.bytesRead;
+            
+            if (bytesRead > 0) {
+              // Write only the bytes that were read
+              await writeWithBackpressure(buffer.subarray(0, bytesRead));
+              position += bytesRead;
+            }
+          } while (bytesRead === BUFFER_SIZE);
+          
+        } finally {
+          await fd.close();
         }
         
-        const chunkStream = fs.createReadStream(chunkPath);
-        
-        // Pipe chunk to passthrough WITHOUT ending it (end: false)
-        chunkStream.pipe(passThrough, { end: false });
-        
-        // Wait for chunk to finish streaming, checking for downstream errors
-        await Promise.race([
-          finished(chunkStream),
-          new Promise<never>((_, reject) => {
-            if (downstreamError) reject(downstreamError);
-            const checkError = setInterval(() => {
-              if (downstreamError) {
-                clearInterval(checkError);
-                reject(downstreamError);
-              }
-            }, 100);
-            chunkStream.once("end", () => clearInterval(checkError));
-            chunkStream.once("error", () => clearInterval(checkError));
-          })
-        ]);
-        
-        // Delete chunk file after streaming to free disk space immediately
+        // Delete chunk file after processing to free disk space
         await fs.promises.unlink(chunkPath).catch(() => {});
       }
       
-      // All chunks streamed, close the passthrough to signal completion
-      passThrough.end();
+      // Finalize the upload
+      await new Promise<void>((resolve, reject) => {
+        gcsWriteStream.end((err: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
       
-      // Wait for GCS upload to complete
-      await finished(gcsWriteStream);
+      console.log(`[ChunkUpload] All ${chunkPaths.length} chunks uploaded successfully`);
+      
     } catch (error) {
-      // Clean up on error
-      passThrough.destroy();
       gcsWriteStream.destroy();
       throw error;
     }
