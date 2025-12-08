@@ -93,13 +93,12 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
           continue;
         }
 
-        const isVideo = file.type.startsWith("video/");
         const isImage = file.type.startsWith("image/");
 
-        if (!isVideo && !isImage) {
+        if (!isImage) {
           toast({
-            title: "Invalid file type",
-            description: "Only images and videos are supported",
+            title: "Images only",
+            description: "Additional media is limited to images. Use the main post for videos.",
             variant: "destructive",
           });
           continue;
@@ -109,7 +108,7 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
         
         const newMedia: PostMediaItem = {
           id: crypto.randomUUID(),
-          type: isVideo ? "video" : "image",
+          type: "image",
           url: url,
         };
 
@@ -117,8 +116,8 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
       }
 
       toast({
-        title: "Media added",
-        description: "Your media has been uploaded successfully.",
+        title: "Images added",
+        description: "Your images have been uploaded successfully.",
       });
     } catch (error) {
       toast({
@@ -275,7 +274,7 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,video/*"
+                accept="image/*"
                 multiple
                 onChange={handleAddMedia}
                 className="hidden"
@@ -295,7 +294,7 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
                 ) : (
                   <Plus className="h-4 w-4 mr-2" />
                 )}
-                Add Photos/Videos
+                Add Photos
               </Button>
             </div>
           </div>

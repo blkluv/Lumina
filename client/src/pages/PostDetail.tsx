@@ -454,6 +454,40 @@ export default function PostDetail() {
               </div>
             )}
 
+            {(post as any).additionalMedia && (post as any).additionalMedia.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mb-4" data-testid="gallery-additional-media">
+                {(post as any).additionalMedia.map((media: any, index: number) => (
+                  <div key={media.id || index} className="rounded-lg overflow-hidden bg-muted aspect-square">
+                    {media.type === "video" ? (
+                      <div className="relative w-full h-full bg-black flex items-center justify-center">
+                        {media.thumbnailUrl ? (
+                          <img
+                            src={media.thumbnailUrl}
+                            alt="Video thumbnail"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Play className="w-8 h-8 text-white/60" />
+                        )}
+                        <div className="absolute top-2 left-2">
+                          <span className="bg-black/70 text-white text-xs px-2 py-1 rounded">
+                            Video
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <img
+                        src={media.url}
+                        alt={`Additional media ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        data-testid={`img-additional-media-${index}`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-4 border-t">
               <div className="flex items-center gap-1">
                 <Button

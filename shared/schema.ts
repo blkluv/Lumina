@@ -353,9 +353,19 @@ export const insertPostSchema = createInsertSchema(posts).omit({
   createdAt: true,
 });
 
+export const postMediaItemSchema = z.object({
+  id: z.string(),
+  type: z.enum(["image", "video"]),
+  url: z.string(),
+  thumbnailUrl: z.string().optional(),
+  hlsUrl: z.string().optional(),
+  duration: z.number().optional(),
+});
+
 export const updatePostSchema = z.object({
   content: z.string().optional(),
   visibility: z.enum(["public", "followers", "private"]).optional(),
+  additionalMedia: z.array(postMediaItemSchema).optional(),
 });
 
 export type UpdatePost = z.infer<typeof updatePostSchema>;

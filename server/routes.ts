@@ -8,6 +8,7 @@ import path from "path";
 import os from "os";
 import { storage } from "./storage";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { updatePostSchema } from "@shared/schema";
 
 // Configure multer for file uploads (2GB limit for long videos)
 const upload = multer({
@@ -976,7 +977,6 @@ export async function registerRoutes(app: Express): Promise<void> {
     try {
       const postId = req.params.id;
       const userId = req.session.userId!;
-      const { content, additionalMedia } = req.body;
 
       const post = await storage.getPost(postId);
       if (!post) {
@@ -987,13 +987,21 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(403).json({ error: "You can only edit your own posts" });
       }
 
+      // Validate request body with Zod schema
+      const parseResult = updatePostSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parseResult.error.issues });
+      }
+
+      const { content, additionalMedia } = parseResult.data;
+
       // Sanitize content
       const sanitizedContent = sanitizeText(content || "");
 
       // Build update object
       const updates: any = { content: sanitizedContent };
       
-      // Only update additionalMedia if it's provided
+      // Only update additionalMedia if it's provided and validated
       if (additionalMedia !== undefined) {
         updates.additionalMedia = additionalMedia;
       }
