@@ -564,16 +564,19 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       let thumbnailUrl = selectedThumbnail;
       
       // Upload video using Mux Direct Upload (browser -> Mux, bypasses server)
+      let hlsUrl: string | null = null;
+      
       if (mediaType === "video" && mediaFile && !mediaUrl) {
         console.log("[Submit] Uploading video via Mux Direct Upload...");
         try {
           const muxResult = await uploadVideoToMux(mediaFile);
-          // Use MP4 URL for social media compatibility (Facebook OG tags)
+          // MP4 for social sharing (Facebook OG tags), HLS for in-app playback
           mediaUrl = muxResult.mp4Url;
+          hlsUrl = muxResult.hlsUrl;
           thumbnailUrl = muxResult.thumbnailUrl;
           setUploadedVideoPath(mediaUrl);
           setSelectedThumbnail(thumbnailUrl);
-          console.log("[Submit] Mux upload complete:", { mediaUrl, thumbnailUrl });
+          console.log("[Submit] Mux upload complete:", { mediaUrl, hlsUrl, thumbnailUrl });
         } catch (muxError: any) {
           // Check if Mux is not configured - fall back to Object Storage
           if (muxError.message?.includes("503") || muxError.message?.includes("not configured")) {
@@ -607,7 +610,8 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
       await apiRequest("POST", "/api/posts", {
         content: content.trim(),
         postType: mediaType || "text",
-        mediaUrl, // Mux MP4 URL or Object Storage path
+        mediaUrl, // Mux MP4 URL for social sharing or Object Storage path
+        hlsUrl, // Mux HLS URL for in-app adaptive streaming playback
         thumbnailUrl, // Mux auto-generated thumbnail
         visibility,
         groupId: groupId || null,
