@@ -463,11 +463,14 @@ export class ObjectStorageService {
       return [];
     }
     
-    const prefix = `temp-chunks/${uploadId}/chunk_`;
-    const { bucketName } = parseObjectPath(`${privateObjectDir}/${prefix}`);
+    // Use the same path structure as uploadChunkToGCS
+    const prefixPath = `${privateObjectDir}/temp-chunks/${uploadId}/chunk_`;
+    const { bucketName, objectName: objectPrefix } = parseObjectPath(prefixPath);
     
     const bucket = objectStorageClient.bucket(bucketName);
-    const [files] = await bucket.getFiles({ prefix: `${privateObjectDir.split('/').slice(1).join('/')}/${prefix}` });
+    console.log(`[GCS List] Looking for chunks with prefix: ${objectPrefix}`);
+    const [files] = await bucket.getFiles({ prefix: objectPrefix });
+    console.log(`[GCS List] Found ${files.length} files`);
     
     const chunkIndices: number[] = [];
     for (const file of files) {
@@ -487,12 +490,12 @@ export class ObjectStorageService {
       return;
     }
     
-    const prefix = `temp-chunks/${uploadId}/`;
-    const { bucketName } = parseObjectPath(`${privateObjectDir}/${prefix}`);
+    // Use the same path structure as uploadChunkToGCS
+    const prefixPath = `${privateObjectDir}/temp-chunks/${uploadId}/`;
+    const { bucketName, objectName: objectPrefix } = parseObjectPath(prefixPath);
     
     const bucket = objectStorageClient.bucket(bucketName);
-    const fullPrefix = `${privateObjectDir.split('/').slice(1).join('/')}/${prefix}`;
-    const [files] = await bucket.getFiles({ prefix: fullPrefix });
+    const [files] = await bucket.getFiles({ prefix: objectPrefix });
     
     console.log(`[GCS Cleanup] Deleting ${files.length} temp files for upload ${uploadId}`);
     for (const file of files) {
