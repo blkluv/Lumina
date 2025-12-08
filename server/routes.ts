@@ -971,12 +971,12 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Edit own post (update caption/content)
+  // Edit own post (update caption/content and additional media)
   app.patch("/api/posts/:id", requireAuth, async (req, res) => {
     try {
       const postId = req.params.id;
       const userId = req.session.userId!;
-      const { content } = req.body;
+      const { content, additionalMedia } = req.body;
 
       const post = await storage.getPost(postId);
       if (!post) {
@@ -990,9 +990,15 @@ export async function registerRoutes(app: Express): Promise<void> {
       // Sanitize content
       const sanitizedContent = sanitizeText(content || "");
 
-      const updatedPost = await storage.updatePost(postId, { 
-        content: sanitizedContent,
-      });
+      // Build update object
+      const updates: any = { content: sanitizedContent };
+      
+      // Only update additionalMedia if it's provided
+      if (additionalMedia !== undefined) {
+        updates.additionalMedia = additionalMedia;
+      }
+
+      const updatedPost = await storage.updatePost(postId, updates);
 
       res.json(updatedPost);
     } catch (error) {

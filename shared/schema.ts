@@ -140,6 +140,7 @@ export const posts = pgTable("posts", {
   hlsUrl: text("hls_url"),
   thumbnailUrl: text("thumbnail_url"),
   videoDuration: integer("video_duration"),
+  additionalMedia: jsonb("additional_media").$type<PostMediaItem[]>(),
   visibility: postVisibilityEnum("visibility").notNull().default("public"),
   groupId: varchar("group_id").references(() => groups.id, { onDelete: "set null" }),
   repostOfId: varchar("repost_of_id"),
@@ -149,6 +150,15 @@ export const posts = pgTable("posts", {
   viewCount: integer("view_count").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export interface PostMediaItem {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  thumbnailUrl?: string;
+  hlsUrl?: string;
+  duration?: number;
+}
 
 export const postsRelations = relations(posts, ({ one, many }) => ({
   author: one(users, {
