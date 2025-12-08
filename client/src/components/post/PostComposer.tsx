@@ -220,6 +220,7 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
             formData.append("uploadId", uploadId);
             formData.append("chunkIndex", String(chunkIndex));
             formData.append("totalChunks", String(totalChunks));
+            formData.append("contentType", file.type);
             
             xhr.upload.addEventListener("progress", (event) => {
               if (event.lengthComputable && event.total > 0) {
@@ -279,9 +280,12 @@ export function PostComposer({ onSuccess, className, groupId }: PostComposerProp
     }
     
     // Finalize the upload and get the actual storage path
+    // Include totalChunks and contentType for autoscale resilience (complete may hit different instance)
     console.log("[Upload] All chunks uploaded, completing...");
     const completeResponse = await apiRequest("POST", "/api/objects/chunked-upload/complete", {
       uploadId,
+      totalChunks,
+      contentType: file.type,
     });
     const completeData = await completeResponse.json();
     

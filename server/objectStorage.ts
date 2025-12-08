@@ -1,4 +1,4 @@
-import { Storage, File } from "@google-cloud/storage";
+import { Storage, File as GCSFile } from "@google-cloud/storage";
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import {
@@ -96,7 +96,7 @@ export class ObjectStorageService {
     return dir;
   }
 
-  async searchPublicObject(filePath: string): Promise<File | null> {
+  async searchPublicObject(filePath: string): Promise<GCSFile | null> {
     for (const searchPath of this.getPublicObjectSearchPaths()) {
       const fullPath = `${searchPath}/${filePath}`;
       const { bucketName, objectName } = parseObjectPath(fullPath);
@@ -110,7 +110,7 @@ export class ObjectStorageService {
     return null;
   }
 
-  async downloadObject(file: File, res: Response, cacheTtlSec: number = 3600, req?: Request) {
+  async downloadObject(file: GCSFile, res: Response, cacheTtlSec: number = 3600, req?: Request) {
     try {
       const [metadata] = await file.getMetadata();
       const aclPolicy = await getObjectAclPolicy(file);
@@ -201,7 +201,7 @@ export class ObjectStorageService {
     });
   }
 
-  async getObjectEntityFile(objectPath: string): Promise<File> {
+  async getObjectEntityFile(objectPath: string): Promise<GCSFile> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
     }
@@ -225,7 +225,7 @@ export class ObjectStorageService {
     return objectFile;
   }
 
-  async getSignedReadURL(file: File, ttlSec: number = 3600): Promise<string> {
+  async getSignedReadURL(file: GCSFile, ttlSec: number = 3600): Promise<string> {
     // file.name is just the object name, file.bucket.name is the bucket name
     const bucketName = file.bucket.name;
     const objectName = file.name;
@@ -332,83 +332,172 @@ export class ObjectStorageService {
     return `/objects/${relativePath}`;
   }
 
-  // Upload multiple chunk files directly to GCS - combines chunks into single file first
-  // Uses synchronous file append to ensure data integrity (no stream buffering issues)
-  async uploadFromChunkFiles(
-    chunkPaths: string[],
+  // Upload a single chunk directly to GCS (for distributed/autoscale environments)
+  // Chunks are stored as temp-chunks/{uploadId}/chunk_{index} and composed later
+  async uploadChunkToGCS(
+    uploadId: string,
+    chunkIndex: number,
+    chunkData: Buffer,
+    contentType: string
+  ): Promise<{ size: number }> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+    
+    const chunkPath = `${privateObjectDir}/temp-chunks/${uploadId}/chunk_${chunkIndex.toString().padStart(6, '0')}`;
+    const { bucketName, objectName } = parseObjectPath(chunkPath);
+    
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    
+    await new Promise<void>((resolve, reject) => {
+      const stream = file.createWriteStream({
+        metadata: { contentType: 'application/octet-stream' },
+        resumable: false,
+      });
+      
+      stream.on("error", reject);
+      stream.on("finish", resolve);
+      stream.end(chunkData);
+    });
+    
+    console.log(`[GCS Chunk] Uploaded chunk ${chunkIndex} for ${uploadId}: ${chunkData.length} bytes`);
+    return { size: chunkData.length };
+  }
+
+  // Compose multiple chunks from GCS into a single file using GCS compose API
+  // This works across autoscale instances since all data is in GCS, not local filesystem
+  async composeChunksFromGCS(
+    uploadId: string,
+    totalChunks: number,
     contentType: string
   ): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
       throw new Error("PRIVATE_OBJECT_DIR not set");
     }
+    
     const objectId = randomUUID();
-    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
-    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const finalPath = `${privateObjectDir}/uploads/${objectId}`;
+    const { bucketName, objectName: finalObjectName } = parseObjectPath(finalPath);
+    
+    const bucket = objectStorageClient.bucket(bucketName);
+    
+    console.log(`[GCS Compose] Composing ${totalChunks} chunks for upload ${uploadId}...`);
+    
+    // Build list of source chunk files
+    const sourceFiles: GCSFile[] = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkPath = `${privateObjectDir}/temp-chunks/${uploadId}/chunk_${i.toString().padStart(6, '0')}`;
+      const { objectName: chunkObjectName } = parseObjectPath(chunkPath);
+      sourceFiles.push(bucket.file(chunkObjectName));
+    }
+    
+    // GCS compose has a limit of 32 objects per compose operation
+    // For larger files, we need to compose in batches
+    const COMPOSE_LIMIT = 32;
+    let currentSources = sourceFiles;
+    let tempFileIndex = 0;
+    
+    while (currentSources.length > COMPOSE_LIMIT) {
+      const newSources: GCSFile[] = [];
+      
+      for (let i = 0; i < currentSources.length; i += COMPOSE_LIMIT) {
+        const batch = currentSources.slice(i, i + COMPOSE_LIMIT);
+        const tempPath = `${privateObjectDir}/temp-chunks/${uploadId}/composed_${tempFileIndex++}`;
+        const { objectName: tempObjectName } = parseObjectPath(tempPath);
+        const tempFile = bucket.file(tempObjectName);
+        
+        console.log(`[GCS Compose] Composing batch of ${batch.length} files -> temp file ${tempFileIndex}`);
+        await (tempFile as any).compose(batch, { metadata: { contentType } });
+        newSources.push(tempFile);
+        
+        // Delete source files after composing
+        for (const src of batch) {
+          await src.delete().catch(() => {});
+        }
+      }
+      
+      currentSources = newSources;
+    }
+    
+    // Final compose to destination
+    const destFile = bucket.file(finalObjectName);
+    console.log(`[GCS Compose] Final compose of ${currentSources.length} files -> ${finalObjectName}`);
+    await (destFile as any).compose(currentSources, { metadata: { contentType } });
+    
+    // Clean up remaining temp files
+    for (const src of currentSources) {
+      await src.delete().catch(() => {});
+    }
+    
+    // Get final file size for logging
+    const [metadata] = await destFile.getMetadata();
+    console.log(`[GCS Compose] Complete: ${metadata.size} bytes`);
+    
+    return `/objects/uploads/${objectId}`;
+  }
+
+  // Check if a chunk exists in GCS
+  async chunkExistsInGCS(uploadId: string, chunkIndex: number): Promise<boolean> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      return false;
+    }
+    
+    const chunkPath = `${privateObjectDir}/temp-chunks/${uploadId}/chunk_${chunkIndex.toString().padStart(6, '0')}`;
+    const { bucketName, objectName } = parseObjectPath(chunkPath);
     
     const bucket = objectStorageClient.bucket(bucketName);
     const file = bucket.file(objectName);
     
-    const fs = await import("fs");
-    const path = await import("path");
-    const { pipeline } = await import("stream/promises");
-    
-    // First, combine all chunks into a single temp file using synchronous append
-    // This ensures each chunk is fully written before moving to the next
-    const tempCombinedPath = path.join(path.dirname(chunkPaths[0]), "combined_video");
-    
-    console.log(`[ChunkUpload] Combining ${chunkPaths.length} chunks into temp file...`);
-    
-    let totalBytes = 0;
-    
-    try {
-      // Use appendFile for atomic writes - no buffering issues
-      // First, create/truncate the file
-      await fs.promises.writeFile(tempCombinedPath, Buffer.alloc(0));
-      
-      // Append each chunk synchronously
-      for (let i = 0; i < chunkPaths.length; i++) {
-        const chunkPath = chunkPaths[i];
-        
-        // Read chunk
-        const chunkData = await fs.promises.readFile(chunkPath);
-        totalBytes += chunkData.length;
-        console.log(`[ChunkUpload] Appending chunk ${i + 1}/${chunkPaths.length} (${chunkData.length} bytes, total: ${totalBytes})`);
-        
-        // Append to combined file - this is atomic and waits for disk flush
-        await fs.promises.appendFile(tempCombinedPath, chunkData);
-        
-        // Delete chunk file after appending to free disk space
-        await fs.promises.unlink(chunkPath).catch(() => {});
-      }
-      
-      // Verify combined file size before upload
-      const stats = await fs.promises.stat(tempCombinedPath);
-      console.log(`[ChunkUpload] Combined file created: ${stats.size} bytes (expected: ${totalBytes})`);
-      
-      if (stats.size !== totalBytes) {
-        throw new Error(`Combined file size mismatch: got ${stats.size}, expected ${totalBytes}`);
-      }
-      
-      // Now upload the combined file to GCS using stream
-      console.log(`[ChunkUpload] Uploading ${stats.size} bytes to GCS...`);
-      const readStream = fs.createReadStream(tempCombinedPath);
-      const gcsWriteStream = file.createWriteStream({
-        metadata: { contentType },
-        resumable: true,
-        validation: false, // Disable MD5/CRC validation for large assembled files
-      });
-      
-      await pipeline(readStream, gcsWriteStream);
-      
-      console.log(`[ChunkUpload] Upload complete: ${chunkPaths.length} chunks, ${stats.size} bytes`);
-      
-    } finally {
-      // Clean up combined temp file
-      await fs.promises.unlink(tempCombinedPath).catch(() => {});
+    const [exists] = await file.exists();
+    return exists;
+  }
+
+  // List all chunks that exist for an upload in GCS
+  async listChunksInGCS(uploadId: string): Promise<number[]> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      return [];
     }
     
-    return `/objects/uploads/${objectId}`;
+    const prefix = `temp-chunks/${uploadId}/chunk_`;
+    const { bucketName } = parseObjectPath(`${privateObjectDir}/${prefix}`);
+    
+    const bucket = objectStorageClient.bucket(bucketName);
+    const [files] = await bucket.getFiles({ prefix: `${privateObjectDir.split('/').slice(1).join('/')}/${prefix}` });
+    
+    const chunkIndices: number[] = [];
+    for (const file of files) {
+      const match = file.name.match(/chunk_(\d+)$/);
+      if (match) {
+        chunkIndices.push(parseInt(match[1], 10));
+      }
+    }
+    
+    return chunkIndices.sort((a, b) => a - b);
+  }
+
+  // Clean up temp chunks for an upload
+  async cleanupTempChunks(uploadId: string): Promise<void> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      return;
+    }
+    
+    const prefix = `temp-chunks/${uploadId}/`;
+    const { bucketName } = parseObjectPath(`${privateObjectDir}/${prefix}`);
+    
+    const bucket = objectStorageClient.bucket(bucketName);
+    const fullPrefix = `${privateObjectDir.split('/').slice(1).join('/')}/${prefix}`;
+    const [files] = await bucket.getFiles({ prefix: fullPrefix });
+    
+    console.log(`[GCS Cleanup] Deleting ${files.length} temp files for upload ${uploadId}`);
+    for (const file of files) {
+      await file.delete().catch(() => {});
+    }
   }
 
   // Upload file from readable stream to GCS (proxy upload for large files)
@@ -460,7 +549,7 @@ export class ObjectStorageService {
     requestedPermission,
   }: {
     userId?: string;
-    objectFile: File;
+    objectFile: GCSFile;
     requestedPermission?: ObjectPermission;
   }): Promise<boolean> {
     return canAccessObject({

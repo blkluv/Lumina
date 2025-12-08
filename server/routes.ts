@@ -1269,70 +1269,32 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Chunked upload storage - tracks in-progress uploads with DISK-BACKED persistence
-  // Metadata is saved to disk so uploads survive server restarts
+  // Chunked upload storage - tracks in-progress uploads
+  // NOTE: Chunks are stored directly in GCS to work with autoscale (stateless instances)
+  // Only metadata is stored in memory for the current request context
   const chunkedUploads = new Map<string, {
-    tempDir: string;
     contentType: string;
     totalChunks: number;
-    receivedChunks: Set<number>;
     userId: string;
     createdAt: Date;
   }>();
 
-  // Helper to save upload metadata to disk
-  async function saveUploadMetadata(uploadId: string, upload: typeof chunkedUploads extends Map<string, infer V> ? V : never) {
-    const metaFile = path.join(upload.tempDir, "metadata.json");
-    const data = {
-      uploadId,
-      contentType: upload.contentType,
-      totalChunks: upload.totalChunks,
-      receivedChunks: Array.from(upload.receivedChunks),
-      userId: upload.userId,
-      createdAt: upload.createdAt.toISOString(),
-    };
-    await fs.promises.writeFile(metaFile, JSON.stringify(data), "utf-8");
-  }
-
-  // Helper to load upload metadata from disk if not in memory
-  async function loadUploadMetadata(uploadId: string): Promise<typeof chunkedUploads extends Map<string, infer V> ? V : never | null> {
-    const tempDir = path.join(os.tmpdir(), `chunked_upload_${uploadId}`);
-    const metaFile = path.join(tempDir, "metadata.json");
-    try {
-      const data = JSON.parse(await fs.promises.readFile(metaFile, "utf-8"));
-      const upload = {
-        tempDir,
-        contentType: data.contentType,
-        totalChunks: data.totalChunks,
-        receivedChunks: new Set<number>(data.receivedChunks),
-        userId: data.userId,
-        createdAt: new Date(data.createdAt),
-      };
-      chunkedUploads.set(uploadId, upload);
-      console.log(`Loaded upload metadata from disk: ${uploadId}, ${upload.receivedChunks.size}/${upload.totalChunks} chunks`);
-      return upload;
-    } catch {
-      return null;
-    }
-  }
-
-  // Clean up old chunked uploads (older than 1 hour)
+  // Clean up old chunked uploads from GCS (older than 1 hour)
   setInterval(async () => {
+    // Note: This only cleans up in-memory registry
+    // GCS temp chunks are cleaned up on successful complete or after 24 hours by GCS lifecycle policy
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    for (const [uploadId, upload] of chunkedUploads) {
+    const entries = Array.from(chunkedUploads.entries());
+    for (const [uploadId, upload] of entries) {
       if (upload.createdAt < oneHourAgo) {
-        // Clean up temp files
-        try {
-          await fs.promises.rm(upload.tempDir, { recursive: true, force: true });
-        } catch (e) {
-          // Ignore cleanup errors
-        }
+        // Clean up GCS temp chunks
+        await objectStorageService.cleanupTempChunks(uploadId).catch(() => {});
         chunkedUploads.delete(uploadId);
       }
     }
   }, 5 * 60 * 1000); // Check every 5 minutes
 
-  // Initialize chunked upload - creates temp directory for chunks
+  // Initialize chunked upload - just registers the upload, no local temp files
   app.post("/api/objects/chunked-upload/init", requireAuth, async (req, res) => {
     try {
       const { contentType, totalChunks } = req.body;
@@ -1342,24 +1304,15 @@ export async function registerRoutes(app: Express): Promise<void> {
       
       const uploadId = crypto.randomUUID();
       
-      // Create temp directory for this upload's chunks
-      const tempDir = path.join(os.tmpdir(), `chunked_upload_${uploadId}`);
-      await fs.promises.mkdir(tempDir, { recursive: true });
-      
       const upload = {
-        tempDir,
         contentType,
         totalChunks,
-        receivedChunks: new Set<number>(),
         userId: req.session.userId!,
         createdAt: new Date(),
       };
       chunkedUploads.set(uploadId, upload);
       
-      // Save metadata to disk for resilience against server restarts
-      await saveUploadMetadata(uploadId, upload);
-      
-      console.log(`Chunked upload initialized: ${uploadId}, ${totalChunks} chunks expected`);
+      console.log(`Chunked upload initialized: ${uploadId}, ${totalChunks} chunks expected (GCS-based)`);
       res.json({ uploadId, objectPath: `/objects/uploads/${uploadId}` });
     } catch (error: any) {
       console.error("Chunked upload init error:", error);
@@ -1367,111 +1320,98 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Upload a chunk - writes directly to disk instead of memory
+  // Upload a chunk - uploads directly to GCS (works with autoscale)
   const chunkUpload = multer({
-    storage: multer.diskStorage({
-      destination: (req, file, cb) => {
-        // Temporarily use system temp, we'll move it after
-        cb(null, os.tmpdir());
-      },
-      filename: (req, file, cb) => {
-        cb(null, `chunk_temp_${crypto.randomUUID()}`);
-      }
-    }),
+    storage: multer.memoryStorage(), // Use memory storage since we upload to GCS immediately
     limits: { fileSize: 15 * 1024 * 1024 }, // 15MB per chunk
   });
 
   app.post("/api/objects/chunked-upload/chunk", requireAuth, chunkUpload.single("chunk"), async (req, res) => {
     try {
-      const { uploadId, chunkIndex } = req.body;
+      const { uploadId, chunkIndex, totalChunks, contentType } = req.body;
       
       if (!uploadId || chunkIndex === undefined) {
-        // Clean up temp file if exists
-        if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
         return res.status(400).json({ error: "uploadId and chunkIndex are required" });
-      }
-      
-      // Try memory first, then disk (for server restart resilience)
-      let upload = chunkedUploads.get(uploadId);
-      if (!upload) {
-        upload = await loadUploadMetadata(uploadId);
-      }
-      if (!upload) {
-        if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
-        return res.status(404).json({ error: "Upload not found" });
-      }
-      
-      if (upload.userId !== req.session.userId) {
-        if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
-        return res.status(403).json({ error: "Unauthorized" });
       }
       
       if (!req.file) {
         return res.status(400).json({ error: "No chunk data provided" });
       }
       
+      // For autoscale resilience, we don't require init to be on the same instance
+      // We just need the uploadId and upload the chunk directly to GCS
+      let upload = chunkedUploads.get(uploadId);
+      
+      // If upload not in memory (different instance), create a minimal record
+      if (!upload && totalChunks && contentType) {
+        upload = {
+          contentType,
+          totalChunks: parseInt(totalChunks),
+          userId: req.session.userId!,
+          createdAt: new Date(),
+        };
+        chunkedUploads.set(uploadId, upload);
+      }
+      
       const chunkIdx = parseInt(chunkIndex);
+      const chunkContentType = upload?.contentType || contentType || 'application/octet-stream';
       
-      // Move chunk to the upload's temp directory
-      const chunkPath = path.join(upload.tempDir, `chunk_${chunkIdx.toString().padStart(6, '0')}`);
-      await fs.promises.rename(req.file.path, chunkPath);
+      // Upload chunk directly to GCS
+      await objectStorageService.uploadChunkToGCS(
+        uploadId,
+        chunkIdx,
+        req.file.buffer,
+        chunkContentType
+      );
       
-      upload.receivedChunks.add(chunkIdx);
+      // Get current chunk count from GCS (accurate across instances)
+      const existingChunks = await objectStorageService.listChunksInGCS(uploadId);
       
-      // Save updated metadata to disk for resilience
-      await saveUploadMetadata(uploadId, upload);
-      
-      console.log(`Chunk ${chunkIdx + 1}/${upload.totalChunks} received for upload ${uploadId}`);
-      res.json({ success: true, chunksReceived: upload.receivedChunks.size });
+      console.log(`Chunk ${chunkIdx + 1}/${upload?.totalChunks || '?'} uploaded to GCS for ${uploadId}`);
+      res.json({ success: true, chunksReceived: existingChunks.length });
     } catch (error: any) {
       console.error("Chunk upload error:", error);
-      if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {});
       res.status(500).json({ error: error.message || "Failed to upload chunk" });
     }
   });
 
-  // Complete chunked upload - streams chunks to storage without loading all into memory
+  // Complete chunked upload - uses GCS compose to merge chunks (works with autoscale)
   app.post("/api/objects/chunked-upload/complete", requireAuth, async (req, res) => {
-    const { uploadId } = req.body;
-    let upload: { tempDir: string; contentType: string; totalChunks: number; receivedChunks: Set<number>; userId: string; createdAt: Date; } | undefined = undefined;
+    const { uploadId, totalChunks, contentType } = req.body;
     
     try {
       if (!uploadId) {
         return res.status(400).json({ error: "uploadId is required" });
       }
       
-      // Try memory first, then disk (for server restart resilience)
-      upload = chunkedUploads.get(uploadId);
-      if (!upload) {
-        upload = await loadUploadMetadata(uploadId);
-      }
-      if (!upload) {
-        return res.status(404).json({ error: "Upload not found" });
+      // Get upload metadata from memory or use request params
+      let upload = chunkedUploads.get(uploadId);
+      const finalTotalChunks = upload?.totalChunks || parseInt(totalChunks);
+      const finalContentType = upload?.contentType || contentType;
+      
+      if (!finalTotalChunks || !finalContentType) {
+        return res.status(400).json({ error: "totalChunks and contentType are required" });
       }
       
-      if (upload.userId !== req.session.userId) {
-        return res.status(403).json({ error: "Unauthorized" });
-      }
+      // Verify all chunks exist in GCS
+      const existingChunks = await objectStorageService.listChunksInGCS(uploadId);
+      console.log(`Found ${existingChunks.length}/${finalTotalChunks} chunks in GCS for ${uploadId}`);
       
-      // Verify all chunks received
-      if (upload.receivedChunks.size !== upload.totalChunks) {
+      if (existingChunks.length !== finalTotalChunks) {
         return res.status(400).json({ 
-          error: `Missing chunks: received ${upload.receivedChunks.size} of ${upload.totalChunks}` 
+          error: `Missing chunks: found ${existingChunks.length} of ${finalTotalChunks} in GCS`,
+          existingChunks 
         });
       }
       
-      console.log(`Completing chunked upload: ${upload.totalChunks} chunks`);
+      console.log(`Composing chunked upload from GCS: ${finalTotalChunks} chunks`);
       
-      // Build ordered list of chunk file paths
-      const chunkPaths: string[] = [];
-      for (let i = 0; i < upload.totalChunks; i++) {
-        chunkPaths.push(path.join(upload.tempDir, `chunk_${i.toString().padStart(6, '0')}`));
-      }
-      
-      // Stream chunks directly to cloud storage - NO intermediate combined file
-      // This avoids both memory exhaustion AND temp disk space issues on production
-      // Each chunk is deleted after streaming to free disk space immediately
-      const objectPath = await objectStorageService.uploadFromChunkFiles(chunkPaths, upload.contentType);
+      // Use GCS compose API to merge all chunks into final file
+      const objectPath = await objectStorageService.composeChunksFromGCS(
+        uploadId,
+        finalTotalChunks,
+        finalContentType
+      );
       
       // Set ACL to public
       await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
@@ -1479,18 +1419,16 @@ export async function registerRoutes(app: Express): Promise<void> {
         visibility: "public",
       });
       
-      console.log(`Chunked upload complete: ${objectPath}`);
+      // Clean up memory registry
+      chunkedUploads.delete(uploadId);
+      
+      console.log(`Chunked upload complete (GCS compose): ${objectPath}`);
       res.json({ objectPath, success: true });
     } catch (error: any) {
       console.error("Complete chunked upload error:", error);
+      // Clean up temp chunks on error
+      await objectStorageService.cleanupTempChunks(uploadId).catch(() => {});
       res.status(500).json({ error: error.message || "Failed to complete chunked upload" });
-    } finally {
-      // Always clean up temp files and registry entry
-      if (uploadId && upload) {
-        // Use recursive rm to clean up temp directory and any remaining files
-        await fs.promises.rm(upload.tempDir, { recursive: true, force: true }).catch(() => {});
-        chunkedUploads.delete(uploadId);
-      }
     }
   });
 
