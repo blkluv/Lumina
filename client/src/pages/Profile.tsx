@@ -410,7 +410,7 @@ export default function Profile() {
                     {profileUser.businessHours && (
                       <div className="flex items-start gap-2">
                         <Clock className="h-4 w-4 mt-0.5" />
-                        <span className="whitespace-pre-line" data-testid="text-business-hours">{typeof profileUser.businessHours === 'string' ? profileUser.businessHours : (profileUser.businessHours as string)}</span>
+                        <span className="whitespace-pre-line" data-testid="text-business-hours">{String(profileUser.businessHours)}</span>
                       </div>
                     )}
                   </div>
@@ -496,6 +496,7 @@ export default function Profile() {
                   <div
                     key={video.id}
                     className="relative aspect-[9/16] rounded-lg overflow-hidden bg-muted group cursor-pointer"
+                    onClick={() => navigate(`/post/${video.id}`)}
                     data-testid={`video-grid-${video.id}`}
                   >
                     {video.thumbnailUrl ? (
@@ -508,6 +509,7 @@ export default function Profile() {
                       <video
                         src={video.mediaUrl || undefined}
                         className="w-full h-full object-cover"
+                        preload="metadata"
                       />
                     )}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">

@@ -2,6 +2,8 @@ import { useParams, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Heart, MessageCircle, Share2, Coins, Play, Copy, Check, Twitter, Facebook } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import MuxPlayer from "@mux/mux-player-react";
+import Hls from "hls.js";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -48,13 +50,26 @@ export default function PostDetail() {
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [muxPlaybackId, setMuxPlaybackId] = useState<string | null>(null);
+  const [useHls, setUseHls] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const muxPlayerRef = useRef<any>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const copyTimeoutRef = useRef<NodeJS.Timeout>();
+
+  const extractMuxPlaybackId = (url: string): string | null => {
+    const match = url.match(/stream\.mux\.com\/([a-zA-Z0-9]+)\.m3u8/);
+    return match ? match[1] : null;
+  };
 
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
       }
     };
   }, []);
@@ -70,6 +85,94 @@ export default function PostDetail() {
       setLiked((post as any).liked ?? false);
     }
   }, [post]);
+
+  useEffect(() => {
+    const setupVideoSource = async () => {
+      if (!post || post.postType !== "video") return;
+
+      const hlsUrl = (post as any).hlsUrl;
+      if (hlsUrl) {
+        const playbackId = extractMuxPlaybackId(hlsUrl);
+        if (playbackId) {
+          setMuxPlaybackId(playbackId);
+          setVideoSrc(null);
+          setUseHls(false);
+          return;
+        }
+        setVideoSrc(hlsUrl);
+        setUseHls(true);
+        setMuxPlaybackId(null);
+        return;
+      }
+
+      setMuxPlaybackId(null);
+      if (!post.mediaUrl) {
+        setVideoSrc(null);
+        return;
+      }
+      
+      if (!post.mediaUrl.startsWith("/objects/")) {
+        setVideoSrc(post.mediaUrl);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/objects/signed-url?path=${encodeURIComponent(post.mediaUrl)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setVideoSrc(data.signedUrl);
+        } else {
+          setVideoSrc(post.mediaUrl);
+        }
+      } catch (error) {
+        console.error("Failed to fetch signed URL:", error);
+        setVideoSrc(post.mediaUrl);
+      }
+    };
+
+    setupVideoSource();
+  }, [post]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoSrc || !useHls) return;
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+      });
+
+      hlsRef.current = hls;
+      hls.loadSource(videoSrc);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error("HLS error:", data);
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          }
+        }
+      });
+
+      return () => {
+        hls.destroy();
+        hlsRef.current = null;
+      };
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = videoSrc;
+    }
+  }, [videoSrc, useHls]);
 
   const postUrl = `${window.location.origin}/post/${id}`;
   const shareText = post ? `Check out this post by @${post.author?.username} on Lumina!` : "Check out this post on Lumina!";
@@ -212,22 +315,45 @@ export default function PostDetail() {
               </p>
             )}
 
-            {post.mediaUrl && post.postType === "video" && (
+            {post.postType === "video" && (
               <div 
                 className="relative rounded-lg overflow-hidden bg-black aspect-video mb-4 cursor-pointer"
-                onClick={togglePlayPause}
+                onClick={muxPlaybackId ? undefined : togglePlayPause}
               >
-                <video
-                  ref={videoRef}
-                  src={post.mediaUrl}
-                  className="w-full h-full object-contain"
-                  playsInline
-                  loop
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  data-testid="video-post-media"
-                />
-                {!isPlaying && (
+                {muxPlaybackId ? (
+                  <MuxPlayer
+                    ref={muxPlayerRef}
+                    playbackId={muxPlaybackId}
+                    poster={post.thumbnailUrl || undefined}
+                    loop
+                    streamType="on-demand"
+                    primaryColor="#10b981"
+                    secondaryColor="#000000"
+                    accentColor="#10b981"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    className="w-full h-full object-contain"
+                    style={{ width: '100%', height: '100%' }}
+                    data-testid="mux-video-post-media"
+                  />
+                ) : videoSrc ? (
+                  <video
+                    ref={videoRef}
+                    src={useHls ? undefined : videoSrc}
+                    poster={post.thumbnailUrl || undefined}
+                    className="w-full h-full object-contain"
+                    playsInline
+                    loop
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    data-testid="video-post-media"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-white" />
+                  </div>
+                )}
+                {!isPlaying && !muxPlaybackId && videoSrc && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                     <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
                       <Play className="w-8 h-8 text-black fill-black ml-1" />
