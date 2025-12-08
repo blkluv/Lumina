@@ -26,7 +26,8 @@ import {
   Wand2,
   LayoutTemplate,
   History,
-  X
+  X,
+  Download
 } from "lucide-react";
 import type { PromptTemplate, GenerationJob, UserBrandProfile } from "@shared/schema";
 
@@ -1003,6 +1004,25 @@ function JobHistoryPanel() {
                     {job.createdAt ? new Date(job.createdAt).toLocaleDateString() : "Unknown"}
                   </span>
                 </div>
+                {job.resultUrl && job.status === "completed" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-3"
+                    data-testid={`button-download-${job.id}`}
+                    onClick={() => {
+                      const link = document.createElement("a");
+                      link.href = job.resultUrl!;
+                      link.download = `lumina-${job.outputType}-${job.id.slice(0, 8)}.${job.outputType === "image" ? "png" : "mp4"}`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
