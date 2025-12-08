@@ -121,6 +121,9 @@ export function PostEditModal({ open, onOpenChange, post }: PostEditModalProps) 
     const uuid = pathParts[pathParts.length - 1];
     const objectPath = `/objects/uploads/${uuid}`;
     
+    // Set ACL policy on the uploaded object so it can be accessed
+    await apiRequest("POST", "/api/objects/upload-complete", { objectPath, visibility: "public" });
+    
     // Fetch signed URL for preview
     const signedRes = await fetch(`/api/objects/signed-url?path=${encodeURIComponent(objectPath)}`);
     const signedData = await signedRes.json();

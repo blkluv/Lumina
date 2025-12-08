@@ -1312,6 +1312,38 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Confirm upload and set ACL policy - call this after uploading to signed URL
+  app.post("/api/objects/upload-complete", requireAuth, async (req, res) => {
+    try {
+      const { objectPath, visibility = "public" } = req.body;
+      if (!objectPath) {
+        return res.status(400).json({ error: "objectPath is required" });
+      }
+      
+      // Normalize the path if it's a full GCS URL or raw path
+      let normalizedPath = objectPath;
+      
+      // Handle full GCS URLs
+      if (objectPath.includes('.private/uploads/')) {
+        const match = objectPath.match(/\.private\/uploads\/([a-f0-9-]+)/i);
+        if (match) {
+          normalizedPath = `/objects/uploads/${match[1]}`;
+        }
+      }
+      
+      // Set ACL policy on the uploaded object
+      await objectStorageService.trySetObjectEntityAclPolicy(normalizedPath, {
+        owner: req.session.userId!,
+        visibility: visibility as "public" | "private",
+      });
+      
+      res.json({ objectPath: normalizedPath, success: true });
+    } catch (error: any) {
+      console.error("Upload complete error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete upload" });
+    }
+  });
+
   // Resumable upload endpoint for large files (videos)
   app.post("/api/objects/resumable-upload", requireAuth, async (req, res) => {
     try {
@@ -1626,10 +1658,25 @@ export async function registerRoutes(app: Express): Promise<void> {
       
       const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
       
-      const canAccess = await objectStorageService.canAccessObjectEntity({
+      let canAccess = await objectStorageService.canAccessObjectEntity({
         userId: req.session?.userId,
         objectFile,
       });
+
+      // If access denied and user is authenticated, check if we can set a default ACL
+      // This handles legacy uploads that don't have ACL metadata set
+      if (!canAccess && req.session?.userId && objectPath.startsWith("/objects/uploads/")) {
+        try {
+          // Try to set public ACL for legacy objects without ACL
+          await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+            owner: req.session.userId,
+            visibility: "public",
+          });
+          canAccess = true;
+        } catch (aclError) {
+          console.log("Failed to set ACL on legacy object:", aclError);
+        }
+      }
 
       if (!canAccess) {
         return res.status(403).json({ error: "Access denied" });
@@ -1653,10 +1700,23 @@ export async function registerRoutes(app: Express): Promise<void> {
       console.log(`Object request: ${objectPath}, Range: ${req.headers.range || 'none'}, Accept: ${req.headers.accept}`);
       const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
       
-      const canAccess = await objectStorageService.canAccessObjectEntity({
+      let canAccess = await objectStorageService.canAccessObjectEntity({
         userId: req.session?.userId,
         objectFile,
       });
+
+      // If access denied and user is authenticated, try to set default ACL for legacy objects
+      if (!canAccess && req.session?.userId && objectPath.startsWith("/objects/uploads/")) {
+        try {
+          await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+            owner: req.session.userId,
+            visibility: "public",
+          });
+          canAccess = true;
+        } catch (aclError) {
+          console.log("Failed to set ACL on legacy object:", aclError);
+        }
+      }
 
       if (!canAccess) {
         return res.status(403).json({ error: "Access denied" });
