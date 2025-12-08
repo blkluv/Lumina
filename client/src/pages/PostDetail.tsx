@@ -68,6 +68,7 @@ export default function PostDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [additionalMediaUrls, setAdditionalMediaUrls] = useState<Record<string, string>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const muxPlayerRef = useRef<any>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -147,6 +148,46 @@ export default function PostDetail() {
     };
 
     setupVideoSource();
+  }, [post]);
+
+  // Fetch signed URLs for additional media items
+  useEffect(() => {
+    const fetchAdditionalMediaUrls = async () => {
+      if (!post) return;
+      const additionalMedia = (post as any).additionalMedia;
+      if (!additionalMedia || additionalMedia.length === 0) return;
+
+      const urlMap: Record<string, string> = {};
+      
+      await Promise.all(
+        additionalMedia.map(async (media: any) => {
+          if (!media.url) return;
+          
+          // If it's an object storage path, fetch signed URL
+          if (media.url.startsWith("/objects/")) {
+            try {
+              const response = await fetch(`/api/objects/signed-url?path=${encodeURIComponent(media.url)}`);
+              if (response.ok) {
+                const data = await response.json();
+                urlMap[media.id] = data.signedUrl;
+              } else {
+                urlMap[media.id] = media.url;
+              }
+            } catch (error) {
+              console.error("Failed to fetch signed URL for additional media:", error);
+              urlMap[media.id] = media.url;
+            }
+          } else {
+            // External URL, use as-is
+            urlMap[media.id] = media.url;
+          }
+        })
+      );
+
+      setAdditionalMediaUrls(urlMap);
+    };
+
+    fetchAdditionalMediaUrls();
   }, [post]);
 
   useEffect(() => {
@@ -477,7 +518,7 @@ export default function PostDetail() {
                       </div>
                     ) : (
                       <img
-                        src={media.url}
+                        src={additionalMediaUrls[media.id] || media.url}
                         alt={`Additional media ${index + 1}`}
                         className="w-full h-full object-cover"
                         data-testid={`img-additional-media-${index}`}
